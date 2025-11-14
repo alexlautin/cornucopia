@@ -15,7 +15,28 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="(tabs)"
+          options={{
+            headerShown: false,
+            title: '',
+          }}
+        />
+        <Stack.Screen
+          name="option/[id]"
+          options={({ route }) => {
+            const params = route.params as { name?: string } | undefined;
+            const rawName = typeof params?.name === 'string' ? params.name : undefined;
+            const trimmedName = rawName?.trim();
+            const placeName = trimmedName?.length ? trimmedName : undefined;
+
+            return {
+              title: placeName ?? 'Location',
+              headerBackTitle: '',
+              headerBackTitleVisible: false,
+            };
+          }}
+        />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         <Stack.Screen name="signin" options={{ title: 'Sign In' }} />
       </Stack>
