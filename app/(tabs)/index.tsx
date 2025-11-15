@@ -224,9 +224,14 @@ export default function HomeScreen() {
     setTimeout(() => setRefreshing(false), MIN_SPINNER_MS);
   }, [refreshing, getCurrentLocation]);
 
+  // Guarded onEndReached: only try to fetch more when there is something to paginate,
+  // and when we're not already loading/refreshing/initializing.
   const onEndReached = useCallback(() => {
+    if (loading || refreshing || isInitializing.current) return;
+    // If the active filter results in zero visible items, don't trigger another fetch.
+    if (!filteredLocations || filteredLocations.length === 0) return;
     void getCurrentLocation(true);
-  }, [getCurrentLocation]);
+  }, [getCurrentLocation, loading, refreshing, filteredLocations, isInitializing]);
 
   const filteredLocations = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -402,7 +407,7 @@ export default function HomeScreen() {
       </View>
       
       <FlatList
-        data={loading || isInitializing.current ? [] : filteredLocations}
+         data={loading || isInitializing.current ? [] : filteredLocations}
         keyExtractor={(item) => item.id}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         onEndReached={onEndReached}
@@ -505,10 +510,12 @@ export default function HomeScreen() {
                   ) : null}
                 </View>
 
-                <View style={styles.addrRow}>
-                  <ThemedText style={styles.addrIcon}>📍</ThemedText>
-                  <ThemedText style={styles.optionAddress} numberOfLines={1}>{item.address}</ThemedText>
-                </View>
+                {expandedId !== item.id && (
+                  <View style={styles.addrRow}>
+                    <ThemedText style={styles.addrIcon}>📍</ThemedText>
+                    <ThemedText style={styles.optionAddress} numberOfLines={1}>{item.address}</ThemedText>
+                  </View>
+                )}
 
                 {/* Inline expanded content (shows resolved address, opening hours, actions) */}
                 {expandedId === item.id && (
@@ -541,7 +548,7 @@ export default function HomeScreen() {
                             }}
                             style={styles.smallBtn}
                           >
-                            <ThemedText style={{ color: 'white', fontWeight: '600' }}>Navigate</ThemedText>
+                            <ThemedText style={{ color: 'white', fontWeight: '600' }}>Navigate →</ThemedText>
                           </Pressable>
 
                           <Pressable

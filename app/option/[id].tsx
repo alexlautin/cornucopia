@@ -1,6 +1,8 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, Share, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
+
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -32,6 +34,70 @@ export default function OptionDetailsScreen() {
   // Declare state hooks first (stable order)
   const [hours, setHours] = useState<string[] | null>(null);
   const [loadingHours, setLoadingHours] = useState<boolean>(false);
+
+  // Favorites state (persisted per place as `fav_{id}`)
+  const [isFavorite, setIsFavorite] = useState<boolean>(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadFavorite() {
+      if (!params.id) return;
+      try {
+        const key = `fav_${params.id}`;
+        const v = await AsyncStorage.getItem(key);
+        if (cancelled) return;
+        if (!v) {
+          setIsFavorite(false);
+          return;
+        }
+        // support legacy boolean marker '1' or stored JSON metadata
+        try {
+          const parsed = JSON.parse(v);
+          setIsFavorite(Boolean(parsed && parsed.id));
+        } catch {
+          setIsFavorite(v === '1');
+        }
+      } catch {
+        // noop
+      }
+    }
+    loadFavorite();
+    return () => {
+      cancelled = true;
+    };
+  }, [params.id]);
+
+  const toggleFavorite = async () => {
+    if (!params.id) {
+      Alert.alert('Unable to save', 'Missing place id');
+      return;
+    }
+    const key = `fav_${params.id}`;
+    try {
+      if (isFavorite) {
+        await AsyncStorage.removeItem(key);
+        setIsFavorite(false);
+        Alert.alert('Removed', 'This place was removed from your saved list.');
+      } else {
+        // Save compact metadata to show in the list later
+        const payload = {
+          id: params.id,
+          name: name ?? undefined,
+          address: address ?? undefined,
+          type: type ?? undefined,
+          latitude: latitude ?? undefined,
+          longitude: longitude ?? undefined,
+          savedAt: Date.now(),
+        };
+        await AsyncStorage.setItem(key, JSON.stringify(payload));
+        setIsFavorite(true);
+        Alert.alert('Saved', 'This place was added to your saved list.');
+      }
+    } catch (e) {
+      console.error('toggleFavorite error', e);
+      Alert.alert('Error', 'Failed to update favorites.');
+    }
+  };
 
   // Force light mode while this description/details page is active and mounted
   useEffect(() => {
@@ -132,22 +198,31 @@ export default function OptionDetailsScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <ThemedText type="title" style={styles.title}>{name}</ThemedText>
-        <Pressable onPress={handleSharePlace} style={styles.headerShareBtn}>
-          <ThemedText style={styles.headerShareText}>Share</ThemedText>
-        </Pressable>
-      </View>
-      
-      <View style={styles.metaContainer}>
-        {distance ? (
-          <ThemedText style={styles.distance}>{distance}</ThemedText>
-        ) : null}
-      </View>
-      
-      <View style={styles.labelContainer}>
-        <View style={styles.typeLabel}>
-          <ThemedText style={styles.typeLabelText}>{type}</ThemedText>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <ThemedText type="title" style={styles.title}>{name}</ThemedText>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Pressable onPress={toggleFavorite} style={[styles.headerShareBtn, isFavorite && styles.headerFavorited]}>
+              <ThemedText style={[styles.headerShareText, isFavorite && styles.headerFavoritedText]}>
+                {isFavorite ? 'Saved' : 'Save'}
+              </ThemedText>
+            </Pressable>
+            <Pressable onPress={handleSharePlace} style={styles.headerShareBtn}>
+              <ThemedText style={styles.headerShareText}>Share</ThemedText>
+            </Pressable>
+          </View>
+        </View>
+        
+        <View style={styles.metaContainer}>
+          {distance ? (
+            <ThemedText style={styles.distance}>{distance}</ThemedText>
+          ) : null}
+        </View>
+        
+        <View style={styles.labelContainer}>
+          <View style={styles.typeLabel}>
+            <ThemedText style={styles.typeLabelText}>{type}</ThemedText>
+          </View>
         </View>
         {snap ? (
           <View style={styles.snapLabel}>
@@ -156,63 +231,64 @@ export default function OptionDetailsScreen() {
         ) : null}
       </View>
 
-      <ThemedView style={styles.card}>
-        <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
-          Address
-        </ThemedText>
-        {hasUsableAddress ? (
-          <>
-            <ThemedText>{address}</ThemedText>
-            {canNavigate && (
-              <Pressable style={styles.addressNavButton} onPress={handleQuickNavigation}>
-                <ThemedText style={styles.addressNavText}>Navigate →</ThemedText>
-              </Pressable>
-            )}
-          </>
-        ) : canNavigate ? (
-          // Compact UI when address text is not available: only show a single Navigate action.
-          <Pressable style={[styles.addressNavButton, styles.addressOnlyButton]} onPress={handleQuickNavigation}>
-            <ThemedText style={[styles.addressNavText, styles.addressOnlyText]}>Navigate →</ThemedText>
-          </Pressable>
-        ) : (
-          // No address and cannot navigate: show a subtle fallback message without big whitespace.
-          <ThemedText style={{ opacity: 0.7 }}>Address not available</ThemedText>
-        )}
-      </ThemedView>
+        <ThemedView style={styles.card}>
+          <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
+            Address
+          </ThemedText>
+          {hasUsableAddress ? (
+            <>
+              <ThemedText>{address}</ThemedText>
+              {canNavigate && (
+                <Pressable style={styles.addressNavButton} onPress={handleQuickNavigation}>
+                  <ThemedText style={styles.addressNavText}>Navigate →</ThemedText>
+                </Pressable>
+              )}
+            </>
+          ) : canNavigate ? (
+            // Compact UI when address text is not available: only show a single Navigate action.
+            <Pressable style={[styles.addressNavButton, styles.addressOnlyButton]} onPress={handleQuickNavigation}>
+              <ThemedText style={[styles.addressNavText, styles.addressOnlyText]}>Navigate →</ThemedText>
+            </Pressable>
+          ) : (
+            // No address and cannot navigate: show a subtle fallback message without big whitespace.
+            <ThemedText style={{ opacity: 0.7 }}>Address not available</ThemedText>
+          )}
+        </ThemedView>
 
-      <ThemedView style={styles.card}>
-        <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
-          Hours
-        </ThemedText>
-        {loadingHours ? (
-          <ThemedText style={{ opacity: 0.7 }}>Loading hours…</ThemedText>
-        ) : hours && hours.length > 0 ? (
-          <View style={{ gap: 4 }}>
-            {hours.map((line, idx) => (
-              <ThemedText key={`${line}-${idx}`}>• {line}</ThemedText>
-            ))}
-          </View>
-        ) : (
-          <ThemedText style={{ opacity: 0.7 }}>Not available</ThemedText>
-        )}
-      </ThemedView>
+        <ThemedView style={styles.card}>
+          <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
+            Hours
+          </ThemedText>
+          {loadingHours ? (
+            <ThemedText style={{ opacity: 0.7 }}>Loading hours…</ThemedText>
+          ) : hours && hours.length > 0 ? (
+            <View style={{ gap: 4 }}>
+              {hours.map((line, idx) => (
+                <ThemedText key={`${line}-${idx}`}>• {line}</ThemedText>
+              ))}
+            </View>
+          ) : (
+            <ThemedText style={{ opacity: 0.7 }}>Not available</ThemedText>
+          )}
+        </ThemedView>
 
-      <ThemedView style={styles.card}>
-        <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
-          About
-        </ThemedText>
-        <ThemedText>
-          Fresh, accessible food option in your area. More detailed information and hours coming soon.
-        </ThemedText>
-      </ThemedView>
+        <ThemedView style={styles.card}>
+          <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
+            About
+          </ThemedText>
+          <ThemedText>
+            Fresh, accessible food option in your area. More detailed information and hours coming soon.
+          </ThemedText>
+        </ThemedView>
 
-      <ThemedView style={styles.card}>
-        <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
-          Details
-        </ThemedText>
-        <ThemedText>• Type: {type}</ThemedText>
-        {distance ? <ThemedText>• Distance: {distance}</ThemedText> : null}
-      </ThemedView>
+        <ThemedView style={styles.card}>
+          <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
+            Details
+          </ThemedText>
+          <ThemedText>• Type: {type}</ThemedText>
+          {distance ? <ThemedText>• Distance: {distance}</ThemedText> : null}
+        </ThemedView>
+      </ScrollView>
     </ThemedView>
   );
 }
@@ -310,5 +386,15 @@ const styles = StyleSheet.create({
   headerShareText: {
     color: '#1a73e8',
     fontWeight: '700',
+  },
+  headerFavorited: {
+    backgroundColor: '#1a73e8',
+    borderColor: '#174ea6',
+  },
+  headerFavoritedText: {
+    color: '#ffffff',
+  },
+  scrollContent: {
+    paddingBottom: 40,
   },
 });

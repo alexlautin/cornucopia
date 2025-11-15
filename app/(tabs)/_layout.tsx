@@ -1,6 +1,6 @@
 import { BlurView } from 'expo-blur';
 import { Tabs } from 'expo-router';
-import { Platform } from 'react-native';
+import { Platform, View } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -22,52 +22,64 @@ export default function TabLayout() {
           fontWeight: '600',
           letterSpacing: 0.2,
           textAlign: 'center',
-          marginBottom: Platform.OS === 'ios' ? 0 : 0,
+          // slightly more compact labels
+          marginBottom: Platform.OS === 'ios' ? 6 : 4,
         },
         tabBarItemStyle: {
           justifyContent: 'center',
           alignItems: 'center',
         },
+        // Floating pill-style tab bar
         tabBarStyle: {
           position: 'absolute',
-          left: 0,
-          right: 0,
-          bottom: 0,
-          height: 70,
-          borderRadius: 0,
+          left: 16,
+          right: 16,
+          bottom: Platform.OS === 'ios' ? 20 : 12,
+          height: 72,
+          borderRadius: 20,
           borderTopWidth: 0,
-          paddingBottom: Platform.OS === 'ios' ? 18 : 12,
-          paddingTop: Platform.OS === 'ios' ? 10 : 8,
+          paddingBottom: Platform.OS === 'ios' ? 14 : 10,
+          paddingTop: Platform.OS === 'ios' ? 8 : 6,
           justifyContent: 'center',
           backgroundColor: 'transparent',
-          shadowColor: '#00000030',
-          shadowOpacity: 1,
-          shadowOffset: { width: 0, height: -1 },
-          shadowRadius: 8,
-          elevation: 12,
-          overflow: 'hidden',
+          shadowColor: '#000',
+          shadowOpacity: 0.12,
+          shadowOffset: { width: 0, height: 10 },
+          shadowRadius: 20,
+          elevation: 18,
+          overflow: 'visible',
         },
+        // Use a BlurView inside a rounded container so the bar looks lifted
         tabBarBackground: () => (
-          <BlurView
-            pointerEvents="none"
-            tint="light" // always light
-            intensity={65}
-            style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.8)' }}
-          />
+          <View style={{ flex: 1, paddingHorizontal: 16 }}>
+            <BlurView
+              pointerEvents="none"
+              tint="light"
+              intensity={70}
+              style={{
+                flex: 1,
+                marginHorizontal: 0,
+                marginVertical: 6,
+                borderRadius: 20,
+                backgroundColor: 'rgba(255,255,255,0.85)',
+                overflow: 'hidden',
+              }}
+            />
+          </View>
         ),
       }}>
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={24} name="house.fill" color={color} />,
+          tabBarIcon: ({ color }) => <IconSymbol size={22} name="house.fill" color={color} />,
         }}
       />
       <Tabs.Screen
         name="explore"
         options={{
           title: 'Map',
-          tabBarIcon: ({ color }) => <IconSymbol size={24} name="map.fill" color={color} />,
+          tabBarIcon: ({ color }) => <IconSymbol size={22} name="map.fill" color={color} />,
         }}
       />
       <Tabs.Screen
@@ -76,10 +88,10 @@ export default function TabLayout() {
           title: 'Eligibility',
           tabBarIcon: ({ color }) => (
             <IconSymbol
-              size={26}
+              size={24}
               name="checkmark.circle.fill"
               color={color}
-              style={{ marginLeft: 10 }}
+              style={{ marginLeft: 6 }}
             />
           ),
           tabBarLabelStyle: {
@@ -88,7 +100,7 @@ export default function TabLayout() {
             letterSpacing: 0.2,
             textAlign: 'center',
             marginTop: 0,
-            transform: [{ translateX: -2 }],
+            transform: [{ translateX: -6 }],
           },
           tabBarItemStyle: {
             alignItems: 'center',
@@ -99,21 +111,15 @@ export default function TabLayout() {
       <Tabs.Screen
         name="settings"
         options={{
-          title: 'Settings',
-          tabBarIcon: ({ color }) => <IconSymbol size={24} name="gearshape.fill" color={color} />,
+          title: 'Favorites',
+          tabBarIcon: ({ color }) => <IconSymbol size={22} name="heart.fill" color={color} />,
           tabBarLabelStyle: {
             fontSize: 11,
             fontWeight: '600',
             letterSpacing: 0.2,
             textAlign: 'center',
-            transform: [{ translateX: -7 }],
+            transform: [{ translateX: -10 }],
           },
-        }}
-      />
-      <Tabs.Screen
-        name="signin"
-        options={{
-          href: null, // Hide from tab bar
         }}
       />
     </Tabs>

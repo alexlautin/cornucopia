@@ -26,6 +26,10 @@ const MAPPING = {
   // Added search and close mappings to avoid using emoji characters in UI
   'magnifyingglass': 'search',
   'xmark': 'close',
+  // favorites / heart icon mapping
+  'heart.fill': 'favorite',
+  // mappin SF name used in some components -> material place icon
+  'mappin': 'place',
 } as IconMapping;
 
 /**
