@@ -1,7 +1,7 @@
 import { BlurView } from 'expo-blur';
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { Platform, View } from 'react-native';
+import { Platform } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -11,7 +11,6 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme ?? 'light'];
-
   return (
     <Tabs
       screenOptions={{
@@ -23,12 +22,12 @@ export default function TabLayout() {
           fontSize: 11,
           fontWeight: '600',
           letterSpacing: 0.2,
+          textAlign: 'center',
           marginBottom: Platform.OS === 'ios' ? 0 : 0,
         },
         tabBarItemStyle: {
           justifyContent: 'center',
           alignItems: 'center',
-          gap: 2,
         },
         tabBarStyle: {
           position: 'absolute',
@@ -77,6 +76,13 @@ export default function TabLayout() {
         options={{
           title: 'Settings',
           tabBarIcon: ({ color }) => <IconSymbol size={24} name="gearshape.fill" color={color} />,
+          tabBarLabelStyle: {
+            fontSize: 11,
+            fontWeight: '600',
+            letterSpacing: 0.2,
+            textAlign: 'center',
+            transform: [{ translateX: -4 }],
+          },
         }}
       />
     </Tabs>
