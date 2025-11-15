@@ -156,7 +156,7 @@ export default function TabTwoScreen() {
         location.coords.latitude,
         location.coords.longitude,
         undefined,
-        opts?.force ? { force: true } : undefined
+        (opts?.force || !hasLoadedRef.current) ? { force: true } : undefined
       );
 
       console.log(`Found ${osmPlaces.length} OSM places`);
@@ -186,6 +186,7 @@ export default function TabTwoScreen() {
               parseFloat(place.lon)
             )
           ),
+          snap: (place as any).snap ? true : false,
         }));
 
         setLocations(mappedLocations);
@@ -311,6 +312,7 @@ export default function TabTwoScreen() {
                     distance: location.distance,
                     latitude: location.coordinate.latitude.toString(),
                     longitude: location.coordinate.longitude.toString(),
+                    snap: location.snap ? 'true' : 'false',
                   },
                 });
               }}
@@ -320,6 +322,11 @@ export default function TabTwoScreen() {
                 <View style={styles.calloutBadge}>
                   <ThemedText style={styles.calloutBadgeText}>{location.type}</ThemedText>
                 </View>
+                {location.snap ? (
+                  <View style={[styles.calloutBadge, { backgroundColor: '#e6f7eb' }]}> 
+                    <ThemedText style={[styles.calloutBadgeText, { color: '#166534' }]}>SNAP</ThemedText>
+                  </View>
+                ) : null}
                 {location.distance && (
                   <ThemedText style={styles.calloutDistance}>{location.distance}</ThemedText>
                 )}

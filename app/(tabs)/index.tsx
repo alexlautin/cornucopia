@@ -192,6 +192,7 @@ export default function HomeScreen() {
           type: categorizePlace(m.place),
           coordinate: { latitude: lat, longitude: lon },
           distance: formatDistance(calcDist),
+          snap: Boolean((m.place as any).snap),
         } as FoodLocation;
       });
 
@@ -310,6 +311,7 @@ export default function HomeScreen() {
             distance: item.distance,
             latitude: item.coordinate.latitude.toString(),
             longitude: item.coordinate.longitude.toString(),
+            snap: item.snap ? 'true' : 'false',
             ...(hours ? { hours: JSON.stringify(hours) } : {}),
           },
         });
@@ -326,6 +328,7 @@ export default function HomeScreen() {
             distance: item.distance,
             latitude: item.coordinate.latitude.toString(),
             longitude: item.coordinate.longitude.toString(),
+            snap: item.snap ? 'true' : 'false',
           },
         });
       }
@@ -462,14 +465,14 @@ export default function HomeScreen() {
           </View>
         }
         ListEmptyComponent={
-          !loading && !isInitializing.current && (
+          !loading && !isInitializing.current ? (
             <View style={{ padding: 24, alignItems: 'center' }}>
               <ThemedText style={{ opacity: 0.7, marginBottom: 8 }}>No locations found nearby.</ThemedText>
               <Pressable onPress={() => { setQuery(''); setActiveFilter('All'); }} style={styles.resetBtn}>
                 <ThemedText style={{ color: 'white', fontWeight: '600' }}>Clear filters</ThemedText>
               </Pressable>
             </View>
-          )
+          ) : null
         }
         renderItem={({ item }) => (
           <Pressable
@@ -495,6 +498,11 @@ export default function HomeScreen() {
                     <View style={styles.metaDot} />
                     <ThemedText style={styles.subtleText} numberOfLines={1}>{item.type}</ThemedText>
                   </View>
+                  {item.snap ? (
+                    <View style={styles.snapPill}>
+                      <ThemedText style={styles.snapPillText}>SNAP</ThemedText>
+                    </View>
+                  ) : null}
                 </View>
 
                 <View style={styles.addrRow}>
@@ -549,6 +557,7 @@ export default function HomeScreen() {
                                   distance: item.distance,
                                   latitude: item.coordinate.latitude.toString(),
                                   longitude: item.coordinate.longitude.toString(),
+                                  snap: item.snap ? 'true' : 'false',
                                 },
                               });
                             }}
@@ -658,6 +667,21 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', alignItems: 'center' },
   metaDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#a3a3a3', marginRight: 6 },
   subtleText: { fontSize: 12, color: '#6b7280' },
+  snapPill: {
+    marginLeft: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: '#e6f7eb',
+    borderWidth: 1,
+    borderColor: '#bfe5ca',
+  },
+  snapPillText: {
+    color: '#166534',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
   addrRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
   addrIcon: { fontSize: 12, marginRight: 6, opacity: 0.7 },
   optionAddress: { 

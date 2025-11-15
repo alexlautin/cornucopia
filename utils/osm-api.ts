@@ -10,6 +10,7 @@ export interface OSMPlace {
   lon: string;
   display_name: string;
   type: string;
+  snap?: boolean;
   address?: {
     road?: string;
     house_number?: string;
@@ -32,6 +33,8 @@ type SupabaseOSMRecord = {
   type: string | null;
   lat: number | null;
   lon: number | null;
+  snap_eligible?: boolean | null;
+  snap?: boolean | null; // legacy/back-compat
   address?: {
     road?: string | null;
     house_number?: string | null;
@@ -64,6 +67,7 @@ function mapSupabasePlace(record: SupabaseOSMRecord): OSMPlace | null {
     lon: String(record.lon),
     display_name: display,
     type: record.type || 'food_resource',
+    snap: Boolean((record as any).snap_eligible ?? (record as any).snap ?? (record as any).SNAP ?? false),
     address,
     openingHours: record.opening_hours ?? undefined,
   };
@@ -71,17 +75,62 @@ function mapSupabasePlace(record: SupabaseOSMRecord): OSMPlace | null {
 
 async function fetchSupabaseFoodLocations(latitude: number, longitude: number): Promise<OSMPlace[]> {
   try {
-    const { data, error } = await supabase
-      .from('osm_places')
-      .select('place_id,name,type,lat,lon,address,opening_hours')
-      .limit(5000);
+    // Determine which select clause works, preferring snap_eligible
+    const selectClauses = [
+      'place_id,name,type,lat,lon,address,opening_hours,snap_eligible',
+      'place_id,name,type,lat,lon,address,opening_hours,snap',
+      'place_id,name,type,lat,lon,address,opening_hours,"SNAP"',
+    ];
 
-    if (error || !data) {
-      console.error('Supabase table fetch error:', error);
+    let workingSelect: string | null = null;
+
+    for (const clause of selectClauses) {
+      try {
+        const probe = await supabase
+          .from('osm_and_snap_places_atl')
+          .select(clause)
+          .range(0, 0);
+        if (!probe.error) {
+          workingSelect = clause;
+          break;
+        }
+      } catch {
+        // try next
+      }
+    }
+
+    if (!workingSelect) {
+      console.error('Supabase table fetch error: no valid select clause for SNAP column');
       return [];
     }
 
-    const mapped = data.map(mapSupabasePlace).filter(Boolean) as OSMPlace[];
+    // Paginate through all rows in chunks
+    const pageSize = 1000;
+    let from = 0;
+    let allRows: SupabaseOSMRecord[] = [];
+
+    while (true) {
+      const to = from + pageSize - 1;
+      const { data, error } = await supabase
+        .from('osm_and_snap_places_atl')
+        .select(workingSelect)
+        .range(from, to);
+
+      if (error) {
+        console.error('Supabase table fetch error (paged):', error);
+        break;
+      }
+
+      const batch: SupabaseOSMRecord[] = (data as any) || [];
+      allRows = allRows.concat(batch);
+
+      if (batch.length < pageSize) break; // last page
+      from += pageSize;
+      // small yield to avoid blocking event loop on mobile
+      await new Promise((r) => setTimeout(r, 0));
+    }
+
+    const mapped = allRows.map(mapSupabasePlace).filter(Boolean) as OSMPlace[];
 
     const withDistance = mapped
       .map((place) => {
@@ -226,7 +275,9 @@ export function categorizePlace(place: OSMPlace): string {
 const cacheClearListeners = new Set<() => void>();
 export function onOSMCacheCleared(listener: () => void) {
   cacheClearListeners.add(listener);
-  return () => cacheClearListeners.delete(listener);
+  return () => {
+    cacheClearListeners.delete(listener);
+  };
 }
 
 export async function clearOSMMemoryCache() {

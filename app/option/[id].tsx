@@ -17,6 +17,7 @@ export default function OptionDetailsScreen() {
     distance?: string;
     latitude?: string;
     longitude?: string;
+    snap?: string;
   }>();
 
   const name = params.name ?? 'Location';
@@ -25,6 +26,7 @@ export default function OptionDetailsScreen() {
   const distance = params.distance;
   const latitude = params.latitude ? parseFloat(params.latitude) : undefined;
   const longitude = params.longitude ? parseFloat(params.longitude) : undefined;
+  const snap = params.snap === 'true';
   const isOSMData = params.id?.startsWith('osm-') || (params.id && params.id.length > 10);
 
   // Declare state hooks first (stable order)
@@ -147,6 +149,11 @@ export default function OptionDetailsScreen() {
         <View style={styles.typeLabel}>
           <ThemedText style={styles.typeLabelText}>{type}</ThemedText>
         </View>
+        {snap ? (
+          <View style={styles.snapLabel}>
+            <ThemedText style={styles.snapLabelText}>SNAP</ThemedText>
+          </View>
+        ) : null}
       </View>
 
       <ThemedView style={styles.card}>
@@ -241,6 +248,21 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '600',
+  },
+  snapLabel: {
+    marginLeft: 8,
+    backgroundColor: '#e6f7eb',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#bfe5ca',
+  },
+  snapLabelText: {
+    color: '#166534',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   card: {
     padding: 16,
