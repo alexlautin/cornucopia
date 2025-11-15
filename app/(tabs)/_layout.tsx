@@ -5,11 +5,10 @@ import { Platform } from 'react-native';
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-  const theme = Colors[colorScheme ?? 'light'];
+  // Force light theme only
+  const theme = Colors.light;
 
   return (
     <Tabs
@@ -51,7 +50,7 @@ export default function TabLayout() {
         tabBarBackground: () => (
           <BlurView
             pointerEvents="none"
-            tint={colorScheme === 'dark' ? 'dark' : 'light'}
+            tint="light" // always light
             intensity={65}
             style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.8)' }}
           />
@@ -89,7 +88,7 @@ export default function TabLayout() {
             letterSpacing: 0.2,
             textAlign: 'center',
             marginTop: 0,
-            transform: [{ translateX: -4 }],
+            transform: [{ translateX: -2 }],
           },
           tabBarItemStyle: {
             alignItems: 'center',
@@ -107,7 +106,7 @@ export default function TabLayout() {
             fontWeight: '600',
             letterSpacing: 0.2,
             textAlign: 'center',
-            transform: [{ translateX: -6 }],
+            transform: [{ translateX: -7 }],
           },
         }}
       />

@@ -12,10 +12,11 @@ let forcedColorScheme: 'light' | 'dark' | undefined = 'light';
 
 /**
  * Set a forced color scheme for useThemeColor consumers.
- * Pass 'light' | 'dark' to force, or undefined to clear the override.
+ * This app only supports light mode now — keep function for compatibility but no-op.
  */
 export function setForcedColorScheme(scheme?: 'light' | 'dark') {
-  forcedColorScheme = scheme;
+  // no-op: app is locked to light mode
+  forcedColorScheme = 'light';
 }
 
 export function useThemeColor(
@@ -23,14 +24,16 @@ export function useThemeColor(
   colorName: keyof typeof Colors.light & keyof typeof Colors.dark
 ) {
   // Always call the system hook to keep hook order stable even when forcing the scheme.
-  const systemScheme = useColorScheme() ?? 'light';
-  // Prefer the forced scheme when set; otherwise fall back to system color scheme
-  const theme = forcedColorScheme ?? systemScheme;
+  // We still call it to preserve hook-order, but ignore the value.
+  useColorScheme();
+
+  // Always use light theme for colors
+  const theme = 'light';
   const colorFromProps = props[theme];
 
   if (colorFromProps) {
     return colorFromProps;
   } else {
-    return Colors[theme][colorName];
+    return Colors.light[colorName];
   }
 }

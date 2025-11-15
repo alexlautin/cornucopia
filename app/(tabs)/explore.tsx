@@ -1,7 +1,7 @@
 import * as Location from 'expo-location';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import MapView, { Callout, Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 
 import { ThemedText } from '@/components/themed-text';
@@ -21,8 +21,10 @@ export default function TabTwoScreen() {
   const [locations, setLocations] = useState<FoodLocation[]>(foodLocations);
   const [loading, setLoading] = useState(true);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [centeringLocation, setCenteringLocation] = useState(false);
   const lastLoadedRef = useRef<number>(0);
   const hasLoadedRef = useRef<boolean>(false);
+  const mapRef = useRef<MapView | null>(null);
 
   const loadLocations = useCallback(async (opts?: { force?: boolean }) => {
     const isStale = Date.now() - lastLoadedRef.current > STALE_MS;
@@ -112,6 +114,35 @@ export default function TabTwoScreen() {
     }
   }, [locations]);
 
+  const centerOnUserLocation = useCallback(async () => {
+    if (centeringLocation) return;
+    setCenteringLocation(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setCenteringLocation(false);
+        return;
+      }
+      const location = await Location.getCurrentPositionAsync({});
+      const newLocation = {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      };
+      setUserLocation(newLocation);
+      if (mapRef.current) {
+        mapRef.current.animateToRegion({
+          ...newLocation,
+          latitudeDelta: 0.05,
+          longitudeDelta: 0.05,
+        }, 800);
+      }
+    } catch (e) {
+      console.error('Error centering on location:', e);
+    } finally {
+      setCenteringLocation(false);
+    }
+  }, [centeringLocation]);
+
   useFocusEffect(
     useCallback(() => {
       loadLocations();
@@ -139,6 +170,7 @@ export default function TabTwoScreen() {
   return (
     <View style={styles.container}>
       <MapView
+        ref={mapRef}
         style={styles.map}
         provider={PROVIDER_DEFAULT}
         initialRegion={{
@@ -190,6 +222,23 @@ export default function TabTwoScreen() {
         ))}
       </MapView>
       
+      {/* Center location button */}
+      <Pressable
+        style={[styles.centerLocationButton, centeringLocation && styles.centerLocationButtonActive]}
+        onPress={centerOnUserLocation}
+        disabled={centeringLocation}
+        accessibilityLabel="Center map on my location"
+      >
+        {centeringLocation ? (
+          <ActivityIndicator size="small" color="#2563eb" />
+        ) : (
+          <View style={styles.locationArrow}>
+            <View style={styles.locationInnerDot} />
+            <View style={styles.locationHalo} />
+          </View>
+        )}
+      </Pressable>
++
       <ThemedView style={styles.floatingHeader}>
         <ThemedText type="title" style={styles.headerTitle}>
           Explore
@@ -209,6 +258,51 @@ const styles = StyleSheet.create({
   },
   map: {
     flex: 1,
+    paddingBottom: 65,
+  },
+  centerLocationButton: {
+    position: 'absolute',
+    bottom: 110,
+    right: 18,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 6,
+    borderWidth: 0.5,
+    borderColor: 'rgba(0,0,0,0.08)',
+  },
+  centerLocationButtonActive: {
+    transform: [{ scale: 0.98 }],
+  },
+  locationArrow: {
+    width: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  locationInnerDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#2563eb',
+    borderWidth: 2,
+    borderColor: '#ffffff',
+    zIndex: 2,
+  },
+  locationHalo: {
+    position: 'absolute',
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(37, 99, 235, 0.14)',
+    zIndex: 1,
   },
   floatingHeader: {
     position: 'absolute',
