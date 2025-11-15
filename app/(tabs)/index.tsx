@@ -5,7 +5,6 @@ import { formatDistance, getDistance } from '@/utils/distance';
 import {
   categorizePlace,
   formatOSMAddress,
-  onOSMCacheCleared,
   searchNearbyFoodLocations,
 } from '@/utils/osm-api';
 import * as Location from 'expo-location';
@@ -43,27 +42,32 @@ export default function HomeScreen() {
         );
 
         if (osmPlaces.length > 0) {
-          const mapped: FoodLocation[] = osmPlaces.map((place, index) => ({
-            id: place.place_id || `osm-${index}`,
-            name: place.display_name.split(',')[0],
-            address: formatOSMAddress(place),
-            type: categorizePlace(place),
-            coordinate: {
-              latitude: parseFloat(place.lat),
-              longitude: parseFloat(place.lon),
-            },
-            calculatedDistance: getDistance(
+          const mapped = osmPlaces.map((place, index) => {
+            const calcDist = getDistance(
               location.coords.latitude,
               location.coords.longitude,
               parseFloat(place.lat),
               parseFloat(place.lon)
-            ),
-          }));
+            );
+            return {
+              id: place.place_id || `osm-${index}`,
+              name: place.display_name.split(',')[0],
+              address: formatOSMAddress(place),
+              type: categorizePlace(place),
+              coordinate: {
+                latitude: parseFloat(place.lat),
+                longitude: parseFloat(place.lon),
+              },
+              distance: formatDistance(calcDist),
+            };
+          });
 
-          const sorted = mapped.sort((a, b) => a.calculatedDistance - b.calculatedDistance);
-          setSortedLocations(
-            sorted.map((loc) => ({ ...loc, distance: formatDistance(loc.calculatedDistance) }))
-          );
+          const sorted = mapped.sort((a, b) => {
+            const distA = parseFloat(a.distance || '0');
+            const distB = parseFloat(b.distance || '0');
+            return distA - distB;
+          });
+          setSortedLocations(sorted);
           return;
         }
       } catch (e) {
@@ -71,17 +75,24 @@ export default function HomeScreen() {
       }
 
       // Fallback to static list with computed distances
-      const withDistances = foodLocations.map((loc) => ({
-        ...loc,
-        calculatedDistance: getDistance(
+      const withDistances = foodLocations.map((loc) => {
+        const calcDist = getDistance(
           location.coords.latitude,
           location.coords.longitude,
           loc.coordinate.latitude,
           loc.coordinate.longitude
-        ),
-      }));
-      const sorted = withDistances.sort((a, b) => a.calculatedDistance - b.calculatedDistance);
-      setSortedLocations(sorted.map((loc) => ({ ...loc, distance: formatDistance(loc.calculatedDistance) })));
+        );
+        return {
+          ...loc,
+          distance: formatDistance(calcDist),
+        };
+      });
+      const sorted = withDistances.sort((a, b) => {
+        const distA = parseFloat(a.distance || '0');
+        const distB = parseFloat(b.distance || '0');
+        return distA - distB;
+      });
+      setSortedLocations(sorted);
     } catch (error) {
       console.error('Error getting location:', error);
     } finally {
@@ -91,16 +102,6 @@ export default function HomeScreen() {
 
   useEffect(() => {
     getCurrentLocation();
-  }, [getCurrentLocation]);
-
-  useEffect(() => {
-    const unsubscribe = onOSMCacheCleared(() => {
-      setSortedLocations([]);
-      setLoading(true);
-      void getCurrentLocation(true);
-    });
-
-    return unsubscribe;
   }, [getCurrentLocation]);
 
   // Pull-to-refresh: stop spinner quickly; let fetch continue in background

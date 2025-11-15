@@ -233,7 +233,7 @@ export async function searchNearbyFoodLocations(
 
       console.log(`Overpass returned: ${overpassResults.length}`);
 
-      const computeClosest = (places: OSMPlace[], maxDistance: number) => {
+      const computeClosest = (places: OSMPlace[]) => {
         const resultsWithDistance = places.map((place) => {
           const distance = getDistance(
             latitude,
@@ -392,11 +392,4 @@ export async function clearOSMMemoryCache() {
   } catch (e) {
     console.warn('OSM: Persistent cache clear failed', e);
   }
-
-  // Notify UI to clear local state immediately
-  try {
-    cacheClearListeners.forEach((cb) => {
-      try { cb(); } catch {}
-    });
-  } catch {}
 }
