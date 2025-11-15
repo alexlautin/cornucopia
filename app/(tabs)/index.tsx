@@ -1,6 +1,6 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { FoodLocation, foodLocations } from '@/constants/locations';
+import { FoodLocation } from '@/constants/locations';
 import { formatDistance, getDistance } from '@/utils/distance';
 import {
   categorizePlace,
@@ -24,13 +24,14 @@ const sortByDistance = (locations: FoodLocation[]) =>
 export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [sortedLocations, setSortedLocations] = useState<FoodLocation[]>([]); // Start empty
+  const [sortedLocations, setSortedLocations] = useState<FoodLocation[]>([]);
   // NEW: query/filter + last updated
   const [query, setQuery] = useState('');
   const filters = ['All', 'Pantry', 'Grocery', 'Market', 'Food Bank'] as const;
   const [activeFilter, setActiveFilter] = useState<typeof filters[number]>('All');
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const hasInitialLoad = useRef(false);
+  const isInitializing = useRef(true); // NEW: track true initialization
   const router = useRouter();
   const formattedLastUpdated = useMemo(() => {
     if (!lastUpdated) return '';
@@ -79,8 +80,10 @@ export default function HomeScreen() {
   };
 
   const getCurrentLocation = useCallback(async (force?: boolean) => {
-    // Show loader when we don't have data or forcing refresh
-    if (!sortedLocations.length || force) setLoading(true);
+    // Always show loader on initial load or forced refresh
+    if (!hasInitialLoad.current || force) {
+      setLoading(true);
+    }
 
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -88,6 +91,7 @@ export default function HomeScreen() {
         console.log('Location permission not granted');
         setLoading(false);
         hasInitialLoad.current = true;
+        isInitializing.current = false;
         return;
       }
 
@@ -97,12 +101,21 @@ export default function HomeScreen() {
 
       // Only fetch OSM data with larger radius
       console.log('Fetching OSM data...');
-      const osmPlaces = await searchNearbyFoodLocations(
-        locationData.coords.latitude,
-        locationData.coords.longitude,
-        10, // Increased from default 5km to 10km
-        { force } // bypass caches on manual refresh
-      );
+      
+      // Add timeout protection
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Request timeout after 30s')), 30000);
+      });
+      
+      const osmPlaces = await Promise.race([
+        searchNearbyFoodLocations(
+          locationData.coords.latitude,
+          locationData.coords.longitude,
+          10, // Increased from default 5km to 10km
+          force ? { force: true } : undefined // bypass caches on manual refresh
+        ),
+        timeoutPromise
+      ]);
 
       console.log(`Fetched ${osmPlaces.length} places from OSM`);
 
@@ -111,6 +124,8 @@ export default function HomeScreen() {
         setSortedLocations([]);
         setLastUpdated(Date.now());
         hasInitialLoad.current = true;
+        isInitializing.current = false;
+        setLoading(false);
         return;
       }
 
@@ -136,17 +151,21 @@ export default function HomeScreen() {
 
       console.log(`Mapped ${nextLocations.length} locations`);
       const sorted = sortByDistance(nextLocations);
+      console.log('Setting sorted locations...');
       setSortedLocations(sorted);
       setLastUpdated(Date.now());
       hasInitialLoad.current = true;
+      isInitializing.current = false;
+      console.log('Location fetch complete');
     } catch (error) {
       console.error('Error getting location:', error);
       hasInitialLoad.current = true;
+      isInitializing.current = false;
       // Don't set fallback data on error
     } finally {
       setLoading(false);
     }
-  }, []); // Remove dependency on sortedLocations.length
+  }, []); // Empty deps is fine - we use refs for tracking state
 
   useEffect(() => {
     if (!hasInitialLoad.current) {
@@ -197,8 +216,11 @@ export default function HomeScreen() {
   const nearestMi = useMemo(() => toMiles(filteredLocations[0]?.distance || sortedLocations[0]?.distance), [filteredLocations, sortedLocations]);
   const score = useMemo(() => {
     const miles = nearestMi;
-    if (!Number.isFinite(miles)) return { label: 'UNKNOWN', pct: 0.25, color: '#6b7280', hint: 'Location permission required for accuracy.' };
-    const pct = Math.max(0.06, 1 - Math.min(miles / 3, 1)); // clamp at 3mi
+    // Don't show UNKNOWN during initial load
+    if (!hasInitialLoad.current || !Number.isFinite(miles)) {
+      return { label: 'LOADING', pct: 0.25, color: '#6b7280', hint: 'Finding food options near you...' };
+    }
+    const pct = Math.max(0.06, 1 - Math.min(miles / 3, 1));
     const label = miles <= 0.5 ? 'HIGH' : miles <= 1.5 ? 'MEDIUM' : 'LOW';
     const color = label === 'HIGH' ? '#15803d' : label === 'MEDIUM' ? '#f59e0b' : '#b91c1c';
     const hint =
@@ -208,7 +230,7 @@ export default function HomeScreen() {
         ? 'Some options are nearby.'
         : 'Few fresh food options within walking distance.';
     return { label, pct, color, hint };
-  }, [nearestMi]);
+  }, [nearestMi, hasInitialLoad.current]);
 
   return (
     <ThemedView style={styles.container}>
@@ -251,7 +273,9 @@ export default function HomeScreen() {
       {/* FOOD ACCESS SCORE CARD */}
       <ThemedView style={[styles.scoreCard, styles.elevated]}>
         <ThemedText type="subtitle">Food Access Score</ThemedText>
-        <ThemedText type="title" style={[styles.scoreValue, { color: score.color }]}>{score.label}</ThemedText>
+        <ThemedText type="title" style={[styles.scoreValue, { color: score.color }]}>
+          {score.label}
+        </ThemedText>
         <View style={styles.progressBar}>
           <View style={[styles.progressFill, { width: `${Math.round(score.pct * 100)}%`, backgroundColor: score.color }]} />
         </View>
@@ -262,20 +286,18 @@ export default function HomeScreen() {
       <ThemedText type="subtitle" style={styles.sectionHeader}>
         Nearest Options
       </ThemedText>
-      {lastUpdated !== null && (
+      {lastUpdated !== null && !isInitializing.current && (
         <ThemedText style={styles.resultsMeta}>
           Showing {filteredLocations.length} result{filteredLocations.length === 1 ? '' : 's'}
           {filteredLocations.length !== sortedLocations.length ? ` (of ${sortedLocations.length} total)` : ''} · Updated {formattedLastUpdated}
         </ThemedText>
       )}
 
-      {loading ? (
-        // Simple skeletons - show while loading
-        <ThemedView style={styles.loadingContainer}>
-          <View style={styles.skeletonCard} />
-          <View style={styles.skeletonCard} />
-          <View style={styles.skeletonCard} />
-        </ThemedView>
+      {loading || isInitializing.current ? (
+        // Show loading message instead of skeleton cards
+        <View style={styles.loadingContainer}>
+          <ThemedText style={styles.loadingText}>Loading options...</ThemedText>
+        </View>
       ) : (
         <FlatList
           data={filteredLocations}
@@ -287,13 +309,11 @@ export default function HomeScreen() {
           ListEmptyComponent={
             <View style={{ padding: 24, alignItems: 'center' }}>
               <ThemedText style={{ opacity: 0.7, marginBottom: 8 }}>
-                {hasInitialLoad.current ? 'No locations found nearby.' : 'Loading locations...'}
+                No locations found nearby.
               </ThemedText>
-              {hasInitialLoad.current && (
-                <Pressable onPress={() => { setQuery(''); setActiveFilter('All'); }} style={styles.resetBtn}>
-                  <ThemedText style={{ color: 'white', fontWeight: '600' }}>Clear filters</ThemedText>
-                </Pressable>
-              )}
+              <Pressable onPress={() => { setQuery(''); setActiveFilter('All'); }} style={styles.resetBtn}>
+                <ThemedText style={{ color: 'white', fontWeight: '600' }}>Clear filters</ThemedText>
+              </Pressable>
             </View>
           }
           renderItem={({ item }) => (
@@ -569,38 +589,44 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   optionAddress: {
-    flex: 1,
-  },
-  chevronButton: {
-    marginLeft: 8,
+  },flex: 1,
+  optionAddress: {
+    flex: 1,ton: {
+  },marginLeft: 8,
+  chevronButton: {tal: 2,
+    marginLeft: 8,l: 2,
     paddingHorizontal: 2,
     paddingVertical: 2,
-  },
-  chevron: {
+  },color: '#9ca3af',
+  chevron: {ht: '700',
     color: '#9ca3af',
     fontWeight: '700',
     fontSize: 18,
     lineHeight: 18,
-  },
-
-    borderRadius: 999,
-  },adingContainer: {
+  }, ADD: loading + skeleton styles (fix corrupted section)
+  loadingContainer: {
+  // ADD: loading + skeleton styles (fix corrupted section)
+  loadingContainer: {
     padding: 16,
-  // Keep existing styles for legacy references
-  optionType: { opacity: 0.7, marginTop: 2 },
-  optionDistance: { opacity: 0.6, marginBottom: 2 },
-  directionsTextLegacy: { color: 'white', fontWeight: '600' },
-}); backgroundColor: '#f3f4f6',
+    alignItems: 'center',textAlign: 'center',
+    justifyContent: 'center',80',
+  },6,
+  loadingText: {20,
+    fontSize: 16,
+    opacity: 0.7,
+  },backgroundColor: '#1a73e8',
+  skeletonCard: {rizontal: 14,
+    height: 72,
+    borderRadius: 12,
+    backgroundColor: '#f3f4f6',
     marginVertical: 6,
-  },
-  resetBtn: {
-    backgroundColor: '#1a73e8',
-    paddingHorizontal: 14,
+  }, Keep existing legacy refs (deduplicated)
+  resetBtn: {  optionType: { opacity: 0.7, marginTop: 2 },
+    backgroundColor: '#1a73e8',m: 2 },
+    paddingHorizontal: 14,tWeight: '600' },
     paddingVertical: 8,
-    borderRadius: 999,
-  },
-
-  // Keep existing styles for legacy references
+    borderRadius: 999,  },
+  // Keep existing legacy refs (deduplicated)
   optionType: { opacity: 0.7, marginTop: 2 },
   optionDistance: { opacity: 0.6, marginBottom: 2 },
   directionsTextLegacy: { color: 'white', fontWeight: '600' },

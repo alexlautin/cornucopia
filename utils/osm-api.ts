@@ -209,12 +209,14 @@ export async function searchNearbyFoodLocations(
   opts?: { force?: boolean }
 ): Promise<OSMPlace[]> {
   const cacheKey = `locations_${latitude.toFixed(2)}_${longitude.toFixed(2)}`;
+  console.log(`searchNearbyFoodLocations called: ${cacheKey}, force=${opts?.force}`);
 
   // If forcing, skip fast paths and drop in-memory entry for this key
   if (!opts?.force) {
     // 1) Fast path: valid in-memory cache
     const mem = memoryCache.get(cacheKey);
     if (mem && Date.now() - mem.ts < MEMORY_TTL_MS) {
+      console.log('Returning from memory cache');
       // seed hours memory cache from stored places
       mem.data.forEach((p) => {
         if (p.openingHours?.length) hoursMemoryCache.set(p.place_id, p.openingHours);
@@ -223,8 +225,10 @@ export async function searchNearbyFoodLocations(
     }
 
     // 2) Fast path: persistent cache -> memory
+    console.log('Checking persistent cache...');
     const cached = await getCachedData<OSMPlace[]>(cacheKey);
     if (cached && cached.length) {
+      console.log(`Found ${cached.length} items in persistent cache`);
       cached.forEach((p) => {
         if (p.openingHours?.length) hoursMemoryCache.set(p.place_id, p.openingHours);
       });
@@ -234,17 +238,21 @@ export async function searchNearbyFoodLocations(
 
     // 3) Deduplicate concurrent fetches
     if (inflight.has(cacheKey)) {
+      console.log('Waiting for inflight request...');
       return inflight.get(cacheKey)!;
     }
   } else {
     // Drop only in-memory entry for this key; persistent cache will be replaced after fetch
+    console.log('Force flag set, clearing memory cache');
     memoryCache.delete(cacheKey);
   }
 
+  console.log('Starting new fetch from Overpass...');
   const fetchPromise = (async () => {
     try {
       // Use Overpass API with bounding box for food-related locations
       const radiusMeters = radiusKm * 1000;
+      console.log(`Calling fetchOverpassFoodLocations with radius ${radiusMeters}m`);
       const overpassResults = await fetchOverpassFoodLocations(latitude, longitude, radiusMeters);
 
       console.log(`Overpass returned: ${overpassResults.length}`);
@@ -268,20 +276,26 @@ export async function searchNearbyFoodLocations(
       };
 
       const cappedResults = computeClosest(overpassResults);
+      console.log(`After sorting/capping: ${cappedResults.length} results`);
 
       // Hydrate opening hours (cached, then network where needed)
+      console.log('Hydrating opening hours...');
       await hydrateOpeningHours(cappedResults);
+      console.log('Opening hours hydrated');
 
       // Save caches (persist + memory), including openingHours
+      console.log('Saving to cache...');
       await setCachedData(cacheKey, cappedResults);
       memoryCache.set(cacheKey, { data: cappedResults, ts: Date.now() });
       cappedResults.forEach((p) => {
         if (p.openingHours?.length) hoursMemoryCache.set(p.place_id, p.openingHours);
       });
+      console.log('Cache saved, returning results');
 
       return cappedResults;
     } finally {
       inflight.delete(cacheKey);
+      console.log('Removed from inflight');
     }
   })();
 
@@ -319,20 +333,6 @@ export function formatOSMAddress(place: OSMPlace): string {
     house_number ? `${house_number} ` : '',
     road,
     city ? `, ${city}` : '',
-    state ? `, ${state}` : '',
-    postcode ? `, ${postcode}` : '',
-  ].join('');
-}
-
-export function categorizePlace(place: OSMPlace): string {
-  const type = (place.type || '').toLowerCase();
-  const categoryMap: Record<string, string> = {
-    food_bank: 'Food Bank',
-    soup_kitchen: 'Soup Kitchen',
-    community_centre: 'Community Center',
-    place_of_worship: 'Place of Worship',
-    charity: 'Charity',
-    social_facility: 'Social Facility',
     supermarket: 'Supermarket',
     greengrocer: 'Greengrocer',
     convenience: 'Convenience Store',
