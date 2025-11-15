@@ -29,7 +29,7 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [sortedLocations, setSortedLocations] = useState<FoodLocation[]>([]);
   const [query, setQuery] = useState('');
-  const filters = ['All', 'Pantry', 'Grocery', 'Market', 'Food Bank'] as const;
+  const filters = ['All', 'SNAP', 'Pantry', 'Grocery', 'Market', 'Food Bank'] as const;
   const [activeFilter, setActiveFilter] = useState<typeof filters[number]>('All');
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const hasInitialLoad = useRef(false);
@@ -235,6 +235,7 @@ export default function HomeScreen() {
         if (activeFilter === 'Grocery') return /grocery|supermarket|store/.test(t);
         if (activeFilter === 'Market') return /market|farmer/.test(t);
         if (activeFilter === 'Food Bank') return /bank/.test(t);
+        if (activeFilter === 'SNAP') return Boolean(l.snap);
         return true;
       });
     }
@@ -436,8 +437,22 @@ export default function HomeScreen() {
 
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
                 {filters.map((f) => (
-                  <Pressable key={f} onPress={() => setActiveFilter(f)} style={[styles.chip, activeFilter === f && styles.chipActive]}>
-                    <ThemedText style={[styles.chipText, activeFilter === f && styles.chipTextActive]}>{f}</ThemedText>
+                  <Pressable 
+                    key={f} 
+                    onPress={() => setActiveFilter(f)} 
+                    style={[
+                      styles.chip, 
+                      f === 'SNAP' ? styles.snapChip : null,
+                      activeFilter === f && (f === 'SNAP' ? styles.snapChipActive : styles.chipActive)
+                    ]}
+                  >
+                    <ThemedText style={[
+                      styles.chipText, 
+                      f === 'SNAP' ? styles.snapChipText : null,
+                      activeFilter === f && (f === 'SNAP' ? styles.snapChipTextActive : styles.chipTextActive)
+                    ]}>
+                      {f}
+                    </ThemedText>
                   </Pressable>
                 ))}
               </ScrollView>
@@ -625,6 +640,26 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: '#1a73e8', borderColor: '#1a73e8' },
   chipText: { fontSize: 13, color: '#374151' },
   chipTextActive: { color: 'white', fontWeight: '600' },
+  // Special SNAP chip styling (green theme to match SNAP pills)
+  snapChip: { 
+    backgroundColor: '#e6f7eb', 
+    borderColor: '#bfe5ca',
+    borderWidth: 2,
+  },
+  snapChipActive: { 
+    backgroundColor: '#166534', 
+    borderColor: '#166534',
+  },
+  snapChipText: { 
+    color: '#166534', 
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  snapChipTextActive: { 
+    color: '#ffffff', 
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
   scoreCard: { padding: 16, borderRadius: 14, borderWidth: 1, borderColor: '#e5e5e5', backgroundColor: 'white', marginHorizontal: 20 },
   elevated: { shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 2 },
   scoreValue: { fontSize: 30, fontWeight: '700', marginVertical: 4 },
