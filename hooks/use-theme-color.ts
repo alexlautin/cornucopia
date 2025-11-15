@@ -22,8 +22,10 @@ export function useThemeColor(
   props: { light?: string; dark?: string },
   colorName: keyof typeof Colors.light & keyof typeof Colors.dark
 ) {
+  // Always call the system hook to keep hook order stable even when forcing the scheme.
+  const systemScheme = useColorScheme() ?? 'light';
   // Prefer the forced scheme when set; otherwise fall back to system color scheme
-  const theme = forcedColorScheme ?? (useColorScheme() ?? 'light');
+  const theme = forcedColorScheme ?? systemScheme;
   const colorFromProps = props[theme];
 
   if (colorFromProps) {

@@ -1,5 +1,5 @@
 import { useLocalSearchParams } from 'expo-router';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -16,22 +16,23 @@ export default function OptionDetailsScreen() {
     distance?: string;
   }>();
 
-  // Force light mode while this description/details page is active and mounted
-  useEffect(() => {
-    setForcedColorScheme('light');
-    return () => setForcedColorScheme(undefined);
-  }, []);
-
   const name = params.name ?? 'Location';
   const type = params.type ?? '—';
   const address = params.address ?? 'Address not available';
   const distance = params.distance;
   const isOSMData = params.id?.startsWith('osm-') || (params.id && params.id.length > 10);
 
-  const [hours, setHours] = React.useState<string[] | null>(null);
-  const [loadingHours, setLoadingHours] = React.useState<boolean>(false);
+  // Declare state hooks first (stable order)
+  const [hours, setHours] = useState<string[] | null>(null);
+  const [loadingHours, setLoadingHours] = useState<boolean>(false);
 
-  React.useEffect(() => {
+  // Force light mode while this description/details page is active and mounted
+  useEffect(() => {
+    setForcedColorScheme('light');
+    return () => setForcedColorScheme(undefined);
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     async function load() {
       if (!params.id) return;
