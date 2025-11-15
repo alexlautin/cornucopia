@@ -65,14 +65,14 @@ export default function OptionDetailsScreen() {
         )}
       </View>
 
-      <View style={styles.card}>
+      <ThemedView style={styles.card}>
         <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
           Address
         </ThemedText>
         <ThemedText>{address}</ThemedText>
-      </View>
+      </ThemedView>
 
-      <View style={styles.card}>
+      <ThemedView style={styles.card}>
         <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
           Hours
         </ThemedText>
@@ -87,9 +87,9 @@ export default function OptionDetailsScreen() {
         ) : (
           <ThemedText style={{ opacity: 0.7 }}>Not available</ThemedText>
         )}
-      </View>
+      </ThemedView>
 
-      <View style={styles.card}>
+      <ThemedView style={styles.card}>
         <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
           About
         </ThemedText>
@@ -98,16 +98,16 @@ export default function OptionDetailsScreen() {
             ? 'This location data is sourced from OpenStreetMap, a free and open geographic database maintained by volunteers worldwide.'
             : 'Fresh, accessible food option in your area. More detailed information and hours coming soon.'}
         </ThemedText>
-      </View>
+      </ThemedView>
 
-      <View style={styles.card}>
+      <ThemedView style={styles.card}>
         <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
           Details
         </ThemedText>
         <ThemedText>• Type: {type}</ThemedText>
         {distance ? <ThemedText>• Distance: {distance}</ThemedText> : null}
         {isOSMData && <ThemedText>• Data Source: OpenStreetMap</ThemedText>}
-      </View>
+      </ThemedView>
     </ThemedView>
   );
 }

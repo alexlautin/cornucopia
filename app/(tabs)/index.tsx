@@ -2,7 +2,12 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { FoodLocation, foodLocations } from '@/constants/locations';
 import { formatDistance, getDistance } from '@/utils/distance';
-import { categorizePlace, formatOSMAddress, searchNearbyFoodLocations } from '@/utils/osm-api';
+import {
+  categorizePlace,
+  formatOSMAddress,
+  onOSMCacheCleared,
+  searchNearbyFoodLocations,
+} from '@/utils/osm-api';
 import * as Location from 'expo-location';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -86,6 +91,16 @@ export default function HomeScreen() {
 
   useEffect(() => {
     getCurrentLocation();
+  }, [getCurrentLocation]);
+
+  useEffect(() => {
+    const unsubscribe = onOSMCacheCleared(() => {
+      setSortedLocations([]);
+      setLoading(true);
+      void getCurrentLocation(true);
+    });
+
+    return unsubscribe;
   }, [getCurrentLocation]);
 
   // Pull-to-refresh: stop spinner quickly; let fetch continue in background

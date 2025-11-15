@@ -32,6 +32,7 @@ const hoursMemoryCache = new Map<string, string[]>();
 
 // Max distance (miles) to include in results
 const MAX_DISTANCE_MI = 2.5;
+const EXPANDED_DISTANCE_MI = 7.5;
 
 // Overpass response types
 type OverpassElement = {
@@ -244,54 +245,68 @@ export async function searchNearbyFoodLocations(
         'free meals'
       ];
 
-      const allResults: OSMPlace[] = [];
-      // Use a ~2.5mi bounding box for Nominatim queries (≈0.036°). Slightly larger for tolerance.
       const searchRadius = 0.04; // ≈2.5 miles bbox
+      const expandedRadius = 0.12; // fallback ≈7-8 miles
 
-      for (let i = 0; i < queries.length; i++) {
-        const query = queries[i];
-        try {
-          const response = await fetch(
-            `https://nominatim.openstreetmap.org/search?` +
-              `q=${encodeURIComponent(query)}&` +
-              `lat=${latitude}&lon=${longitude}&` +
-              `format=json&limit=50&` + // was 30 -> 50
-              `addressdetails=1&` +
-              `bounded=1&` +
-              `viewbox=${longitude - searchRadius},${latitude - searchRadius},${longitude + searchRadius},${latitude + searchRadius}`,
-            {
-              headers: {
-                'User-Agent': 'FoodPantryApp/1.0 (Educational Project)',
-              },
+      async function runNominatimSearch(radius: number, bounded: boolean): Promise<OSMPlace[]> {
+        const aggregated: OSMPlace[] = [];
+        for (let i = 0; i < queries.length; i++) {
+          const query = queries[i];
+          try {
+            const boundedParams = bounded
+              ? `&bounded=1&viewbox=${longitude - radius},${latitude + radius},${longitude + radius},${latitude - radius}`
+              : '';
+            const response = await fetch(
+              `https://nominatim.openstreetmap.org/search?` +
+                `q=${encodeURIComponent(query)}&` +
+                `lat=${latitude}&lon=${longitude}&` +
+                `format=json&limit=50&` +
+                `addressdetails=1${boundedParams}`,
+              {
+                headers: {
+                  'User-Agent': 'FoodPantryApp/1.0 (Educational Project)',
+                },
+              }
+            );
+            if (response.ok) {
+              const results = await response.json();
+              console.log(
+                `Found ${results.length} results for "${query}"${bounded ? '' : ' (expanded)'}`
+              );
+              aggregated.push(...results);
             }
-          );
-          if (response.ok) {
-            const results = await response.json();
-            console.log(`Found ${results.length} results for "${query}"`);
-            allResults.push(...results);
+          } catch (error) {
+            console.error(`Error fetching "${query}":`, error);
           }
-        } catch (error) {
-          console.error(`Error fetching "${query}":`, error);
-        }
 
-        if (i < queries.length - 1) {
-          // raise early stop threshold so we collect more before stopping
-          if (allResults.length >= 200) {
-            console.log('Found enough results, stopping early');
-            break;
+          if (i < queries.length - 1) {
+            if (aggregated.length >= 200) {
+              console.log('Found enough results, stopping early');
+              break;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 1100));
           }
-          await new Promise((resolve) => setTimeout(resolve, 1100));
         }
+        return aggregated;
       }
 
-      // De-dupe Nominatim
+      let allResults = await runNominatimSearch(searchRadius, true);
+      if (!allResults.length) {
+        console.log('Primary Nominatim search empty, expanding radius and removing bounds');
+        allResults = await runNominatimSearch(expandedRadius, false);
+      }
+
       const uniqueResults = Array.from(
         new Map(allResults.map((item) => [item.place_id, item])).values()
       );
       console.log(`Total unique Nominatim results: ${uniqueResults.length}`);
 
       // Always supplement with Overpass (tag-based), but only within ~2.5mi (≈4km)
-      const overpassSupp = await fetchOverpassFoodLocations(latitude, longitude, 4000); // ≈2.5 miles
+      let overpassSupp = await fetchOverpassFoodLocations(latitude, longitude, 4000); // ≈2.5 miles
+      if (!overpassSupp.length) {
+        console.log('Overpass returned 0 results, retrying with 8km radius');
+        overpassSupp = await fetchOverpassFoodLocations(latitude, longitude, 8000);
+      }
       console.log(`Overpass returned: ${overpassSupp.length}`);
 
       const mergedUnique = Array.from(
@@ -299,7 +314,7 @@ export async function searchNearbyFoodLocations(
       );
       console.log(`Merged unique results: ${mergedUnique.length}`);
 
-      const computeClosest = (places: OSMPlace[]) => {
+      const computeClosest = (places: OSMPlace[], maxDistance: number) => {
         const resultsWithDistance = places.map((place) => {
           const distance = getDistance(
             latitude,
@@ -311,14 +326,20 @@ export async function searchNearbyFoodLocations(
         });
 
         return resultsWithDistance
-          .filter((item) => item.distance <= MAX_DISTANCE_MI) // was 10
+          .filter((item) => item.distance <= maxDistance)
           .sort((a, b) => a.distance - b.distance)
           .map((item) => item.place)
           .slice(0, 100); // keep up to 100 within 2.5 miles
       };
 
       // Use merged set (Nominatim + Overpass), then filter/sort/cap
-      let cappedResults = computeClosest(mergedUnique);
+      let cappedResults = computeClosest(mergedUnique, MAX_DISTANCE_MI);
+      if (!cappedResults.length && mergedUnique.length) {
+        console.log(
+          `No locations within ${MAX_DISTANCE_MI}mi, expanding radius to ${EXPANDED_DISTANCE_MI}mi`
+        );
+        cappedResults = computeClosest(mergedUnique, EXPANDED_DISTANCE_MI);
+      }
 
       // Hydrate opening hours (cached, then network where needed)
       await hydrateOpeningHours(cappedResults);
@@ -499,6 +520,14 @@ async function fetchNominatimOpeningHoursByPlaceId(placeId: string): Promise<str
   }
 }
 
+// Event listeners to notify UI when caches are cleared
+const cacheClearListeners = new Set<() => void>();
+
+export function onOSMCacheCleared(listener: () => void) {
+  cacheClearListeners.add(listener);
+  return () => cacheClearListeners.delete(listener);
+}
+
 // Add this export to clear all in-memory caches from this module
 export async function clearOSMMemoryCache() {
   memoryCache.clear();
@@ -522,4 +551,11 @@ export async function clearOSMMemoryCache() {
   } catch (e) {
     console.warn('OSM: Persistent cache clear failed', e);
   }
+
+  // Notify UI to clear local state immediately
+  try {
+    cacheClearListeners.forEach((cb) => {
+      try { cb(); } catch {}
+    });
+  } catch {}
 }
