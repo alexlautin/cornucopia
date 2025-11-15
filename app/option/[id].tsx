@@ -1,12 +1,12 @@
 import { useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, View, Pressable, Linking } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { setForcedColorScheme } from '@/hooks/use-theme-color';
-import { getOpeningHours } from '@/utils/osm-api';
 import { openNavigation, showNavigationOptions } from '@/utils/navigation';
+import { getOpeningHours } from '@/utils/osm-api';
 
 export default function OptionDetailsScreen() {
   const params = useLocalSearchParams<{

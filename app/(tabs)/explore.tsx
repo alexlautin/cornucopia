@@ -10,10 +10,10 @@ import { FoodLocation, foodLocations } from '@/constants/locations';
 import { formatDistance, getDistance } from '@/utils/distance';
 import { openNavigation } from '@/utils/navigation';
 import {
-  categorizePlace,
-  formatOSMAddress,
-  onOSMCacheCleared,
-  searchNearbyFoodLocations,
+    categorizePlace,
+    formatOSMAddress,
+    onOSMCacheCleared,
+    searchNearbyFoodLocations,
 } from '@/utils/osm-api';
 
 const STALE_MS = 5 * 60 * 1000;
