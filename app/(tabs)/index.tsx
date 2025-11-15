@@ -2,53 +2,107 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { FoodLocation, foodLocations } from '@/constants/locations';
 import { formatDistance, getDistance } from '@/utils/distance';
+import { categorizePlace, formatOSMAddress, searchNearbyFoodLocations } from '@/utils/osm-api';
 import * as Location from 'expo-location';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet } from 'react-native';
 
 export default function HomeScreen() {
   const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false); // new
   const [sortedLocations, setSortedLocations] = useState<FoodLocation[]>(foodLocations);
 
-  useEffect(() => {
-    async function getCurrentLocation() {
+  const getCurrentLocation = useCallback(async (force?: boolean) => {
+    // Only show the big loader on first load when we have no data yet
+    if (!sortedLocations.length) setLoading(true);
+
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setLoading(false);
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({});
+      setUserLocation(location);
+
+      // Fetch OSM data (respect force for a fresh fetch)
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          setLoading(false);
+        const osmPlaces = await searchNearbyFoodLocations(
+          location.coords.latitude,
+          location.coords.longitude,
+          undefined,
+          { force } // bypass caches on manual refresh
+        );
+
+        if (osmPlaces.length > 0) {
+          const mapped: FoodLocation[] = osmPlaces.map((place, index) => ({
+            id: place.place_id || `osm-${index}`,
+            name: place.display_name.split(',')[0],
+            address: formatOSMAddress(place),
+            type: categorizePlace(place),
+            coordinate: {
+              latitude: parseFloat(place.lat),
+              longitude: parseFloat(place.lon),
+            },
+            calculatedDistance: getDistance(
+              location.coords.latitude,
+              location.coords.longitude,
+              parseFloat(place.lat),
+              parseFloat(place.lon)
+            ),
+          }));
+
+          const sorted = mapped.sort((a, b) => a.calculatedDistance - b.calculatedDistance);
+          setSortedLocations(
+            sorted.map((loc) => ({ ...loc, distance: formatDistance(loc.calculatedDistance) }))
+          );
           return;
         }
-
-        const location = await Location.getCurrentPositionAsync({});
-        setUserLocation(location);
-
-        // Calculate distances and sort
-        const withDistances = foodLocations.map((loc) => ({
-          ...loc,
-          calculatedDistance: getDistance(
-            location.coords.latitude,
-            location.coords.longitude,
-            loc.coordinate.latitude,
-            loc.coordinate.longitude
-          ),
-        }));
-
-        const sorted = withDistances.sort((a, b) => a.calculatedDistance - b.calculatedDistance);
-        setSortedLocations(sorted.map(loc => ({
-          ...loc,
-          distance: formatDistance(loc.calculatedDistance),
-        })));
-      } catch (error) {
-        console.error('Error getting location:', error);
-      } finally {
-        setLoading(false);
+      } catch (e) {
+        // fall through to static fallback
       }
-    }
 
+      // Fallback to static list with computed distances
+      const withDistances = foodLocations.map((loc) => ({
+        ...loc,
+        calculatedDistance: getDistance(
+          location.coords.latitude,
+          location.coords.longitude,
+          loc.coordinate.latitude,
+          loc.coordinate.longitude
+        ),
+      }));
+      const sorted = withDistances.sort((a, b) => a.calculatedDistance - b.calculatedDistance);
+      setSortedLocations(sorted.map((loc) => ({ ...loc, distance: formatDistance(loc.calculatedDistance) })));
+    } catch (error) {
+      console.error('Error getting location:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [sortedLocations.length]);
+
+  useEffect(() => {
     getCurrentLocation();
-  }, []);
+  }, [getCurrentLocation]);
+
+  // Pull-to-refresh: stop spinner quickly; let fetch continue in background
+  const onRefresh = useCallback(() => {
+    if (refreshing) return;
+    setRefreshing(true);
+    // Fire a forced refresh in the background
+    void getCurrentLocation(true);
+    // End the spinner after a short, fixed delay so it doesn't hang
+    const MIN_SPINNER_MS = 1200;
+    setTimeout(() => setRefreshing(false), MIN_SPINNER_MS);
+  }, [refreshing, getCurrentLocation]);
+
+  // Swipe up to bottom: do a silent background refresh (no spinner)
+  const onEndReached = useCallback(() => {
+    void getCurrentLocation(true);
+  }, [getCurrentLocation]);
 
   return (
     <ThemedView style={styles.container}>
@@ -74,25 +128,28 @@ export default function HomeScreen() {
         Nearest Options
       </ThemedText>
 
-      {loading ? (
+      {loading && !sortedLocations.length ? (
         <ThemedView style={styles.loadingContainer}>
           <ActivityIndicator size="large" />
           <ThemedText style={{ marginTop: 12, opacity: 0.7 }}>
-            Getting your location...
+            Finding food assistance near you...
           </ThemedText>
         </ThemedView>
       ) : (
         <FlatList
           data={sortedLocations}
           keyExtractor={(item) => item.id}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          onEndReached={onEndReached}
+          onEndReachedThreshold={0.2}
           renderItem={({ item }) => (
             <Pressable
               onPress={() =>
                 router.push({
                   pathname: '/option/[id]',
-                  params: { 
-                    id: item.id, 
-                    name: item.name, 
+                  params: {
+                    id: item.id,
+                    name: item.name,
                     type: item.type,
                     address: item.address,
                     distance: item.distance,
@@ -101,14 +158,10 @@ export default function HomeScreen() {
               }
             >
               <ThemedView style={styles.optionCard}>
-                <ThemedText style={styles.optionDistance}>
-                  {item.distance}
-                </ThemedText>
+                <ThemedText style={styles.optionDistance}>{item.distance}</ThemedText>
                 <ThemedView style={styles.optionRow}>
                   <ThemedView style={{ flexDirection: 'column', flex: 1 }}>
-                    <ThemedText type="defaultSemiBold">
-                      {item.name}
-                    </ThemedText>
+                    <ThemedText type="defaultSemiBold">{item.name}</ThemedText>
                     <ThemedText style={styles.optionType}>{item.type}</ThemedText>
                     <ThemedText style={styles.optionAddress}>{item.address}</ThemedText>
                   </ThemedView>
@@ -118,9 +171,9 @@ export default function HomeScreen() {
                       e.stopPropagation();
                       router.push({
                         pathname: '/option/[id]',
-                        params: { 
-                          id: item.id, 
-                          name: item.name, 
+                        params: {
+                          id: item.id,
+                          name: item.name,
                           type: item.type,
                           address: item.address,
                           distance: item.distance,

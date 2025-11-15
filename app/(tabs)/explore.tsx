@@ -1,20 +1,104 @@
-import { router } from 'expo-router';
-import { StyleSheet, View } from 'react-native';
+import * as Location from 'expo-location';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useRef, useState } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import MapView, { Callout, Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { foodLocations } from '@/constants/locations';
+import { FoodLocation, foodLocations } from '@/constants/locations';
+import { formatDistance, getDistance } from '@/utils/distance';
+import { categorizePlace, formatOSMAddress, searchNearbyFoodLocations } from '@/utils/osm-api';
+
+const STALE_MS = 5 * 60 * 1000;
 
 export default function TabTwoScreen() {
+  const [locations, setLocations] = useState<FoodLocation[]>(foodLocations);
+  const [loading, setLoading] = useState(true);
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const lastLoadedRef = useRef<number>(0);
+  const hasLoadedRef = useRef<boolean>(false);
+
+  const loadLocations = useCallback(async () => {
+    // Only refresh if stale or never loaded
+    const isStale = Date.now() - lastLoadedRef.current > STALE_MS;
+    if (hasLoadedRef.current && !isStale) return;
+
+    // Only show spinner when we have nothing yet
+    if (!hasLoadedRef.current && locations.length === 0) setLoading(true);
+
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setLoading(false);
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({});
+      setUserLocation({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      });
+
+      console.log('Fetching OSM data...');
+      // Fetch real data from OSM
+      const osmPlaces = await searchNearbyFoodLocations(
+        location.coords.latitude,
+        location.coords.longitude
+      );
+
+      console.log(`Found ${osmPlaces.length} OSM places`);
+
+      if (osmPlaces.length > 0) {
+        const mappedLocations: FoodLocation[] = osmPlaces.map((place, index) => ({
+          id: place.place_id || `osm-${index}`,
+          name: place.display_name.split(',')[0],
+          address: formatOSMAddress(place),
+          type: categorizePlace(place),
+          coordinate: {
+            latitude: parseFloat(place.lat),
+            longitude: parseFloat(place.lon),
+          },
+          distance: formatDistance(
+            getDistance(
+              location.coords.latitude,
+              location.coords.longitude,
+              parseFloat(place.lat),
+              parseFloat(place.lon)
+            )
+          ),
+        }));
+
+        setLocations(mappedLocations);
+      }
+    } catch (error) {
+      console.error('Error loading locations:', error);
+      // Fall back to static data
+    } finally {
+      hasLoadedRef.current = true;
+      lastLoadedRef.current = Date.now();
+      setLoading(false);
+    }
+  }, [locations]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadLocations();
+    }, [loadLocations])
+  );
+
+  const mapRegion = userLocation || {
+    latitude: 33.7676,
+    longitude: -84.3908,
+  };
+
   return (
     <View style={styles.container}>
       <MapView
         style={styles.map}
         provider={PROVIDER_DEFAULT}
         initialRegion={{
-          latitude: 33.7676,
-          longitude: -84.3908,
+          ...mapRegion,
           latitudeDelta: 0.15,
           longitudeDelta: 0.15,
         }}
@@ -22,7 +106,7 @@ export default function TabTwoScreen() {
         showsMyLocationButton
         showsCompass
       >
-        {foodLocations.map((location) => (
+        {locations.map((location) => (
           <Marker
             key={location.id}
             coordinate={location.coordinate}
@@ -47,7 +131,9 @@ export default function TabTwoScreen() {
                 <View style={styles.calloutBadge}>
                   <ThemedText style={styles.calloutBadgeText}>{location.type}</ThemedText>
                 </View>
-                <ThemedText style={styles.calloutDistance}>{location.distance}</ThemedText>
+                {location.distance && (
+                  <ThemedText style={styles.calloutDistance}>{location.distance}</ThemedText>
+                )}
                 <ThemedText style={styles.calloutTap}>Tap for details →</ThemedText>
               </View>
             </Callout>
@@ -60,8 +146,9 @@ export default function TabTwoScreen() {
           Explore
         </ThemedText>
         <ThemedText style={styles.headerSubtitle}>
-          {foodLocations.length} food options nearby
+          {loading ? 'Loading nearby options...' : `${locations.length} food options nearby`}
         </ThemedText>
+        {loading && <ActivityIndicator size="small" style={{ marginTop: 8 }} />}
       </ThemedView>
     </View>
   );
