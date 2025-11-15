@@ -24,11 +24,16 @@ const cache = new Map<string, { data: OSMPlace[]; timestamp: number }>();
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 // In-memory "stale-while-revalidate" cache and inflight deduper
-const MEMORY_TTL_MS = 5 * 60 * 1000;
+// Increased cache duration to 30 minutes to reduce API calls
+const MEMORY_TTL_MS = 30 * 60 * 1000;
 const memoryCache = new Map<string, { data: OSMPlace[]; ts: number }>();
 const inflight = new Map<string, Promise<OSMPlace[]>>();
-// New: in-memory hours map per placeId
+// In-memory hours map per placeId
 const hoursMemoryCache = new Map<string, string[]>();
+
+// Rate limiting: minimum delay between API calls (milliseconds)
+const MIN_REQUEST_DELAY_MS = 2000; // 2 seconds minimum between requests
+let lastOverpassRequestTime = 0;
 
 // Max distance (miles) to include in results
 const MAX_DISTANCE_MI = 2.5;
@@ -48,64 +53,51 @@ async function fetchOverpassFoodLocations(
   longitude: number,
   radiusMeters: number
 ): Promise<OSMPlace[]> {
-  const query = `
-    [out:json][timeout:25];
-    (
-      node(around:${radiusMeters},${latitude},${longitude})["amenity"="social_facility"]["social_facility"="food_bank"];
-      way(around:${radiusMeters},${latitude},${longitude})["amenity"="social_facility"]["social_facility"="food_bank"];
-      relation(around:${radiusMeters},${latitude},${longitude})["amenity"="social_facility"]["social_facility"="food_bank"];
+  // Enforce rate limiting: wait if necessary
+  const timeSinceLastRequest = Date.now() - lastOverpassRequestTime;
+  if (timeSinceLastRequest < MIN_REQUEST_DELAY_MS) {
+    const delayNeeded = MIN_REQUEST_DELAY_MS - timeSinceLastRequest;
+    console.log(`Rate limit: waiting ${delayNeeded}ms before Overpass request`);
+    await new Promise((resolve) => setTimeout(resolve, delayNeeded));
+  }
 
-      node(around:${radiusMeters},${latitude},${longitude})["charity"="food_bank"];
-      way(around:${radiusMeters},${latitude},${longitude})["charity"="food_bank"];
-      relation(around:${radiusMeters},${latitude},${longitude})["charity"="food_bank"];
+  // Build bounding box from center coordinates and radius
+  // Approximate: 1 degree ≈ 111 km
+  const radiusDegrees = radiusMeters / 111000;
+  const south = (latitude - radiusDegrees).toFixed(2);
+  const west = (longitude - radiusDegrees).toFixed(2);
+  const north = (latitude + radiusDegrees).toFixed(2);
+  const east = (longitude + radiusDegrees).toFixed(2);
 
-      node(around:${radiusMeters},${latitude},${longitude})["amenity"="food_bank"];
-      way(around:${radiusMeters},${latitude},${longitude})["amenity"="food_bank"];
-      relation(around:${radiusMeters},${latitude},${longitude})["amenity"="food_bank"];
+  // Bounding box format: (south, west, north, east)
+  const bbox = `(${south},${west},${north},${east})`;
 
-      node(around:${radiusMeters},${latitude},${longitude})["amenity"="soup_kitchen"];
-      way(around:${radiusMeters},${latitude},${longitude})["amenity"="soup_kitchen"];
-      relation(around:${radiusMeters},${latitude},${longitude})["amenity"="soup_kitchen"];
-
-      node(around:${radiusMeters},${latitude},${longitude})["amenity"="place_of_worship"]["pantry"~"yes|food"];
-      node(around:${radiusMeters},${latitude},${longitude})["amenity"="place_of_worship"]["food_bank"="yes"];
-
-      node(around:${radiusMeters},${latitude},${longitude})["amenity"="community_centre"]["food_bank"="yes"];
-      node(around:${radiusMeters},${latitude},${longitude})["social_facility:for"~"food|homeless"];
-
-      node(around:${radiusMeters},${latitude},${longitude})["pantry"="yes"];
-      way(around:${radiusMeters},${latitude},${longitude})["pantry"="yes"];
-      relation(around:${radiusMeters},${latitude},${longitude})["pantry"="yes"];
-
-      node(around:${radiusMeters},${latitude},${longitude})["social_facility"="outreach"];
-      way(around:${radiusMeters},${latitude},${longitude})["social_facility"="outreach"];
-      relation(around:${radiusMeters},${latitude},${longitude})["social_facility"="outreach"];
-
-      node(around:${radiusMeters},${latitude},${longitude})["amenity"="community_centre"]["pantry"="yes"];
-      way(around:${radiusMeters},${latitude},${longitude})["amenity"="community_centre"]["pantry"="yes"];
-      relation(around:${radiusMeters},${latitude},${longitude})["amenity"="community_centre"]["pantry"="yes"];
-
-      node(around:${radiusMeters},${latitude},${longitude})["service:food"="yes"];
-      way(around:${radiusMeters},${latitude},${longitude})["service:food"="yes"];
-      relation(around:${radiusMeters},${latitude},${longitude})["service:food"="yes"];
-    );
-    out center tags;
-  `;
+  const query = `[out:json];(node["shop"="supermarket"]${bbox};way["shop"="supermarket"]${bbox};node["shop"="greengrocer"]${bbox};way["shop"="greengrocer"]${bbox};node["amenity"="food_bank"]${bbox};way["amenity"="food_bank"]${bbox};node["amenity"="soup_kitchen"]${bbox};way["amenity"="soup_kitchen"]${bbox};node["shop"="bakery"]${bbox};way["shop"="bakery"]${bbox};node["shop"="convenience"]${bbox};way["shop"="convenience"]${bbox};);out body;>;out skel qt;`;
 
   try {
-    const res = await fetch('https://overpass-api.de/api/interpreter', {
-      method: 'POST',
+    console.log('Overpass query:', query);
+    const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+    lastOverpassRequestTime = Date.now();
+    
+    const res = await fetch(url, {
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
         'User-Agent': 'FoodPantryApp/1.0 (Educational Project)',
         Accept: 'application/json',
       },
-      body: `data=${encodeURIComponent(query)}`,
     });
 
-    if (!res.ok) return [];
+    if (res.status === 429) {
+      console.error('Overpass rate limit exceeded (429)');
+      return [];
+    }
+
+    if (!res.ok) {
+      console.error('Overpass API error:', res.status, res.statusText);
+      return [];
+    }
 
     const json = await res.json();
+    console.log('Overpass response:', json);
     const elements: OverpassElement[] = json?.elements ?? [];
 
     const toPlace = (el: OverpassElement): OSMPlace | null => {
@@ -118,7 +110,7 @@ async function fetchOverpassFoodLocations(
         tags.name ||
         tags['operator'] ||
         tags['brand'] ||
-        `${tags.amenity || tags.social_facility || 'Food resource'} (${el.type}/${el.id})`;
+        `${tags.shop || tags.amenity || 'Food resource'} (${el.type}/${el.id})`;
       const openingRaw = tags.opening_hours as string | undefined;
       const formatted = openingRaw ? formatOpeningHoursLines(openingRaw) : undefined;
 
@@ -127,7 +119,7 @@ async function fetchOverpassFoodLocations(
         lat: String(lat),
         lon: String(lon),
         display_name: display,
-        type: tags.amenity || tags.social_facility || 'food_resource',
+        type: tags.shop || tags.amenity || 'food_resource',
         address: {
           house_number: tags['addr:housenumber'],
           road: tags['addr:street'],
@@ -135,13 +127,13 @@ async function fetchOverpassFoodLocations(
           state: tags['addr:state'],
           postcode: tags['addr:postcode'],
         },
-        openingHours: formatted, // New
+        openingHours: formatted,
       };
     };
 
     return elements.map(toPlace).filter(Boolean) as OSMPlace[];
   } catch (e) {
-    console.warn('Overpass fallback failed', e);
+    console.error('Overpass API error:', e);
     return [];
   }
 }
@@ -234,70 +226,11 @@ export async function searchNearbyFoodLocations(
 
   const fetchPromise = (async () => {
     try {
-      // Reduced and prioritized queries for faster initial load
-      const queries = [
-        'food bank',
-        'food pantry',
-        'soup kitchen',
-        'salvation army',
-        'community kitchen',
-        'free meals'
-      ];
+      // Use Overpass API with bounding box for food-related locations
+      const radiusMeters = radiusKm * 1000;
+      const overpassResults = await fetchOverpassFoodLocations(latitude, longitude, radiusMeters);
 
-      const allResults: OSMPlace[] = [];
-      // Use a ~2.5mi bounding box for Nominatim queries (≈0.036°). Slightly larger for tolerance.
-      const searchRadius = 0.04; // ≈2.5 miles bbox
-
-      for (let i = 0; i < queries.length; i++) {
-        const query = queries[i];
-        try {
-          const response = await fetch(
-            `https://nominatim.openstreetmap.org/search?` +
-              `q=${encodeURIComponent(query)}&` +
-              `lat=${latitude}&lon=${longitude}&` +
-              `format=json&limit=50&` + // was 30 -> 50
-              `addressdetails=1&` +
-              `bounded=1&` +
-              `viewbox=${longitude - searchRadius},${latitude - searchRadius},${longitude + searchRadius},${latitude + searchRadius}`,
-            {
-              headers: {
-                'User-Agent': 'FoodPantryApp/1.0 (Educational Project)',
-              },
-            }
-          );
-          if (response.ok) {
-            const results = await response.json();
-            console.log(`Found ${results.length} results for "${query}"`);
-            allResults.push(...results);
-          }
-        } catch (error) {
-          console.error(`Error fetching "${query}":`, error);
-        }
-
-        if (i < queries.length - 1) {
-          // raise early stop threshold so we collect more before stopping
-          if (allResults.length >= 200) {
-            console.log('Found enough results, stopping early');
-            break;
-          }
-          await new Promise((resolve) => setTimeout(resolve, 1100));
-        }
-      }
-
-      // De-dupe Nominatim
-      const uniqueResults = Array.from(
-        new Map(allResults.map((item) => [item.place_id, item])).values()
-      );
-      console.log(`Total unique Nominatim results: ${uniqueResults.length}`);
-
-      // Always supplement with Overpass (tag-based), but only within ~2.5mi (≈4km)
-      const overpassSupp = await fetchOverpassFoodLocations(latitude, longitude, 4000); // ≈2.5 miles
-      console.log(`Overpass returned: ${overpassSupp.length}`);
-
-      const mergedUnique = Array.from(
-        new Map([...uniqueResults, ...overpassSupp].map((p) => [p.place_id, p])).values()
-      );
-      console.log(`Merged unique results: ${mergedUnique.length}`);
+      console.log(`Overpass returned: ${overpassResults.length}`);
 
       const computeClosest = (places: OSMPlace[]) => {
         const resultsWithDistance = places.map((place) => {
@@ -311,14 +244,13 @@ export async function searchNearbyFoodLocations(
         });
 
         return resultsWithDistance
-          .filter((item) => item.distance <= MAX_DISTANCE_MI) // was 10
+          .filter((item) => item.distance <= MAX_DISTANCE_MI)
           .sort((a, b) => a.distance - b.distance)
           .map((item) => item.place)
-          .slice(0, 100); // keep up to 100 within 2.5 miles
+          .slice(0, 100);
       };
 
-      // Use merged set (Nominatim + Overpass), then filter/sort/cap
-      let cappedResults = computeClosest(mergedUnique);
+      let cappedResults = computeClosest(overpassResults);
 
       // Hydrate opening hours (cached, then network where needed)
       await hydrateOpeningHours(cappedResults);
@@ -340,30 +272,6 @@ export async function searchNearbyFoodLocations(
   return fetchPromise;
 }
 
-export async function getPlaceDetails(placeId: string): Promise<OSMPlace | null> {
-  try {
-    const response = await fetch(
-      `https://nominatim.openstreetmap.org/details?` +
-        `place_id=${placeId}&` +
-        `format=json&` +
-        `addressdetails=1`,
-      {
-        headers: {
-          'User-Agent': 'FoodPantryApp/1.0 (Educational Project)',
-        },
-      }
-    );
-
-    if (response.ok) {
-      return await response.json();
-    }
-    return null;
-  } catch (error) {
-    console.error('Error fetching place details:', error);
-    return null;
-  }
-}
-
 export async function getOpeningHours(placeId: string): Promise<string[] | null> {
   // 1) in-memory hours
   const mem = hoursMemoryCache.get(placeId);
@@ -376,18 +284,8 @@ export async function getOpeningHours(placeId: string): Promise<string[] | null>
     return persisted;
   }
 
-  // 3) fetch from the appropriate source and store
-  if (placeId.startsWith('overpass_')) {
-    const lines = await fetchOverpassOpeningHoursById(placeId);
-    if (lines?.length) {
-      hoursMemoryCache.set(placeId, lines);
-      await setCachedPlaceHours(placeId, lines);
-      return lines;
-    }
-    return null;
-  }
-
-  const lines = await fetchNominatimOpeningHoursByPlaceId(placeId);
+  // 3) fetch from Overpass (all locations now come from Overpass)
+  const lines = await fetchOverpassOpeningHoursById(placeId);
   if (lines?.length) {
     hoursMemoryCache.set(placeId, lines);
     await setCachedPlaceHours(placeId, lines);
@@ -463,35 +361,6 @@ async function fetchOverpassOpeningHoursById(overpassId: string): Promise<string
     const json = await res.json();
     const opening = json?.elements?.[0]?.tags?.opening_hours as string | undefined;
     if (!opening) return null;
-    const lines = formatOpeningHoursLines(opening);
-    return lines.length ? lines : null;
-  } catch {
-    return null;
-  }
-}
-
-// Fetch opening hours for Nominatim place_id via details endpoint
-async function fetchNominatimOpeningHoursByPlaceId(placeId: string): Promise<string[] | null> {
-  try {
-    const response = await fetch(
-      `https://nominatim.openstreetmap.org/details?place_id=${encodeURIComponent(
-        placeId
-      )}&format=json&addressdetails=1`,
-      {
-        headers: {
-          'User-Agent': 'FoodPantryApp/1.0 (Educational Project)',
-          Accept: 'application/json',
-        },
-      }
-    );
-    if (!response.ok) return null;
-    const data = await response.json();
-    const opening =
-      data?.extratags?.opening_hours ||
-      data?.addtags?.opening_hours ||
-      data?.tags?.opening_hours ||
-      data?.opening_hours;
-    if (!opening || typeof opening !== 'string') return null;
     const lines = formatOpeningHoursLines(opening);
     return lines.length ? lines : null;
   } catch {
