@@ -30,20 +30,22 @@ export default function TabLayout() {
            alignSelf: 'center',
         },
          tabBarStyle: {
+          position: 'absolute',
           borderTopWidth: 0,
-          height: 80,
-          paddingBottom: Platform.OS === 'ios' ? 20 : 10,
-          paddingTop: 10,
+          height: 56,
+          paddingBottom: Platform.OS === 'ios' ? 8 : 4,
+          paddingTop: 4,
+          backgroundColor: 'transparent',
+          // remove shadow/elevation so underlying content is visible
+          shadowColor: 'transparent',
+          shadowOpacity: 0,
+          shadowOffset: { width: 0, height: 0 },
+          shadowRadius: 0,
+          elevation: 0,
          },
         tabBarBackground: () => (
-          <BlurView
-            tint="light"
-            intensity={100}
-            style={{
-              flex: 1,
-              backgroundColor: 'rgba(255,255,255,0.9)',
-            }}
-          />
+          // keep a transparent background element for compatibility, no visual fill
+          <BlurView tint="light" intensity={20} style={{ flex: 1, backgroundColor: 'transparent' }} />
         ),
       }}>
       <Tabs.Screen

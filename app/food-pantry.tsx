@@ -6,10 +6,10 @@ export default function FoodPantryScreen() {
   return (
     <ThemedView style={styles.container}>
       <ThemedText type="title" style={styles.title}>
-        Food Pantry App
+        Cornucopia
       </ThemedText>
       <ThemedText type="subtitle" style={styles.subtitle}>
-        Welcome to your food pantry management system
+        Food finder.
       </ThemedText>
     </ThemedView>
   );

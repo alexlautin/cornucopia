@@ -4,15 +4,18 @@
     "slug": "emoryhacks25",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/app-icon.png",
     "scheme": "foodpantryapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "This app needs access to your location to show nearby food options."
-      }
+        "NSLocationWhenInUseUsageDescription": "This app needs access to your location to show nearby food options.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bundleIdentifier": "com.emoryhacks25.emoryhacks25",
+      "icon": "./assets/images/app-icon.png"
     },
     "android": {
       "adaptiveIcon": {
@@ -23,7 +26,8 @@
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION"
-      ]
+      ],
+      "icon": "./assets/images/app-icon.png"
     },
     "web": {
       "output": "static",
@@ -34,7 +38,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/icon.png",
+          "image": "./assets/images/app-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
