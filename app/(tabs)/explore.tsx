@@ -188,6 +188,7 @@ export default function TabTwoScreen() {
               type: categorizePlace(place),
               coordinate: { latitude: lat, longitude: lon },
               distance: formatDistance(distMiles),
+              snap: Boolean((place as any).snap),
             };
           });
 
@@ -214,7 +215,7 @@ export default function TabTwoScreen() {
         setLoading(false);
       }
     },
-    [locations, userLocation]
+    [userLocation]
   );
 
   const centerOnUserLocation = useCallback(async () => {
@@ -281,13 +282,62 @@ export default function TabTwoScreen() {
     });
 
     return unsubscribe;
-  }, [loadLocations]);
+  }, [loadLocations, visibleRegion]);
 
   // Center map: prefer user location, fallback to default Atlanta coordinates
   const mapRegion = userLocation || {
     latitude: 33.7676,
     longitude: -84.3908,
   };
+
+  const typeEmoji = useCallback((t?: string) => {
+    if (!t) return '🏬';
+    const normalized = t.toLowerCase();
+    const map: Record<string, string> = {
+      'food bank': '🥫',
+      'food pantry': '🥫',
+      'soup kitchen': '🍲',
+      'meal delivery': '🚚',
+      'community center': '🏘️',
+      'place of worship': '⛪',
+      charity: '💝',
+      'social facility': '🤝',
+      supermarket: '🛒',
+      'grocery store': '🛒',
+      greengrocer: '🥦',
+      'convenience store': '🏪',
+      bakery: '🥐',
+      deli: '🥪',
+      market: '🧺',
+      'farmers market': '🧺',
+    };
+    if (map[normalized]) return map[normalized];
+    if (/bank|pantry|fridge/.test(normalized)) return '🥫';
+    if (/market|farmer/.test(normalized)) return '🧺';
+    if (/grocery|supermarket|store/.test(normalized)) return '🛒';
+    return '🏬';
+  }, []);
+
+  const getMarkerColor = useCallback((type?: string) => {
+    if (!type) return '#2563eb'; // default blue
+    const normalized = type.toLowerCase();
+    
+    // Map categories to colors
+    if (/bank|pantry|fridge/.test(normalized)) return '#b91c1c'; // red for food banks/pantries
+    if (/soup|kitchen/.test(normalized)) return '#f59e0b'; // amber for soup kitchens
+    if (/delivery|meal/.test(normalized)) return '#16a34a'; // green for meal delivery
+    if (/community|center/.test(normalized)) return '#7c3aed'; // purple for community centers
+    if (/worship|church/.test(normalized)) return '#0ea5e9'; // sky blue for places of worship
+    if (/charity/.test(normalized)) return '#fb7185'; // pink for charity
+    if (/social|facility/.test(normalized)) return '#06b6d4'; // cyan for social facilities
+    if (/supermarket|grocery|store/.test(normalized)) return '#059669'; // emerald for supermarkets
+    if (/greengrocer/.test(normalized)) return '#22c55e'; // green for greengrocers
+    if (/convenience/.test(normalized)) return '#f973a0'; // hot pink for convenience stores
+    if (/bakery|deli/.test(normalized)) return '#f97316'; // orange for bakeries/delis
+    if (/market|farmer/.test(normalized)) return '#f59e0b'; // amber for markets
+    
+    return '#2563eb'; // default blue
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -309,8 +359,10 @@ export default function TabTwoScreen() {
           <Marker
             key={location.id}
             coordinate={location.coordinate}
-            pinColor={getPinColor(location.type)}
           >
+            <View style={[styles.markerContainer, { backgroundColor: getMarkerColor(location.type) }]}>
+              <ThemedText style={styles.markerEmoji}>{typeEmoji(location.type)}</ThemedText>
+            </View>
             <Callout
               onPress={() => {
                 router.push({
@@ -391,7 +443,7 @@ const styles = StyleSheet.create({
 
   centerLocationButton: {
     position: 'absolute',
-    bottom: 110,
+    bottom: 30,
     right: 18,
     width: 48,
     height: 48,
@@ -504,5 +556,26 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 12,
     fontWeight: '600',
+  },
+  markerContainer: {
+    backgroundColor: '#2563eb', // default color, will be overridden
+    borderRadius: 20,
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: 'white',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  markerEmoji: {
+    fontSize: 18,
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
 });
