@@ -8,21 +8,14 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function TabLayout() {
-<<<<<<< HEAD
-  // Use light colors for tabs
-  return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: Colors.light.tint,
-=======
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme ?? 'light'];
+
   return (
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: theme.tint,
         tabBarInactiveTintColor: theme.tabIconDefault,
->>>>>>> main
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarLabelStyle: {
@@ -58,7 +51,7 @@ export default function TabLayout() {
         tabBarBackground: () => (
           <BlurView
             pointerEvents="none"
-            tint="light"
+            tint={colorScheme === 'dark' ? 'dark' : 'light'}
             intensity={65}
             style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.8)' }}
           />

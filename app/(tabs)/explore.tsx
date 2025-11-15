@@ -118,10 +118,6 @@ export default function TabTwoScreen() {
     }, [loadLocations])
   );
 
-<<<<<<< HEAD
-  // Center map: prefer user location, otherwise center on first location so markers are visible
-  const mapRegion = userLocation || (locations.length ? locations[0].coordinate : {
-=======
   useEffect(() => {
     const unsubscribe = onOSMCacheCleared(() => {
       setLocations([]);
@@ -134,8 +130,8 @@ export default function TabTwoScreen() {
     return unsubscribe;
   }, [loadLocations]);
 
-  const mapRegion = userLocation || {
->>>>>>> main
+  // Center map: prefer user location, otherwise center on first location so markers are visible
+  const mapRegion = userLocation || (locations.length ? locations[0].coordinate : {
     latitude: 33.7676,
     longitude: -84.3908,
   });
