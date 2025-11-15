@@ -32,7 +32,8 @@ create or replace function public.nearby_places(
   lat double precision,
   lon double precision,
   radius_m integer,
-  limit_count integer default 300
+  limit_count integer default 300,
+  offset_count integer default 0
 )
 returns table (
   id text,
@@ -70,8 +71,10 @@ returns table (
     p.geom,
     ST_SetSRID(ST_MakePoint(lon, lat), 4326)::geography
   ) asc
-  limit least(1000, greatest(1, coalesce(limit_count, 300)));
+  -- Increase the hard ceiling to allow up to 3000 rows per request
+  limit least(3000, greatest(1, coalesce(limit_count, 300)))
+  offset greatest(0, coalesce(offset_count, 0));
 $$;
 
 -- Optional: allow anon to execute RPC (adjust for your security needs)
--- grant execute on function public.nearby_places(double precision,double precision,integer,integer) to anon;
+-- grant execute on function public.nearby_places(double precision,double precision,integer,integer,integer) to anon;

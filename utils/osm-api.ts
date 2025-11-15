@@ -1,5 +1,4 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { fetchNearbyPlacesFromSupabase } from "./supabase-places";
 import {
   getCachedData,
   getCachedPlaceHours,
@@ -7,6 +6,7 @@ import {
   setCachedPlaceHours,
 } from "./cache";
 import { getDistance } from "./distance";
+import { fetchNearbyPlacesFromSupabase } from "./supabase-places";
 
 export interface OSMPlace {
   place_id: string;
@@ -28,10 +28,11 @@ export interface OSMPlace {
 // Simple cache to avoid re-fetching
 const cache = new Map<string, { data: OSMPlace[]; timestamp: number }>();
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-const USE_SUPABASE_PLACES = (process.env.EXPO_PUBLIC_USE_SUPABASE_PLACES || '').toLowerCase() === 'true';
+const USE_SUPABASE_PLACES =
+  (process.env.EXPO_PUBLIC_USE_SUPABASE_PLACES || "").toLowerCase() === "true";
 const OSM_MAX_RESULTS = Math.max(
   50,
-  parseInt(process.env.EXPO_PUBLIC_OSM_MAX_RESULTS || '100', 10) || 100
+  parseInt(process.env.EXPO_PUBLIC_OSM_MAX_RESULTS || "100", 10) || 100
 );
 
 // In-memory "stale-while-revalidate" cache and inflight deduper
@@ -237,6 +238,9 @@ export async function searchNearbyFoodLocations(
 ): Promise<OSMPlace[]> {
   // Optional: prefer Supabase-backed places if enabled
   if (USE_SUPABASE_PLACES) {
+    console.log(
+      `Using Supabase places (limit=${OSM_MAX_RESULTS}, radiusKm=${radiusKm})`
+    );
     const supa = await fetchNearbyPlacesFromSupabase({
       lat: latitude,
       lon: longitude,
@@ -244,6 +248,7 @@ export async function searchNearbyFoodLocations(
       limit: OSM_MAX_RESULTS,
     });
     if (supa && supa.length) {
+      console.log(`Supabase returned: ${supa.length}`);
       return supa;
     }
     // fall through to OSM if Supabase unavailable/empty
@@ -447,10 +452,13 @@ async function fetchOverpassOpeningHoursById(
   overpassId: string
 ): Promise<string[] | null> {
   try {
-    const [, type, rawId] = overpassId.split("_"); // ['overpass', 'node', '123']
-    if (!type || !rawId) return null;
+    const parts = overpassId.split("_");
+    if (parts.length < 3) return null;
+    const typeWord = parts[1]; // node | way | relation
+    const rawId = parts[2];
+    if (!typeWord || !rawId) return null;
 
-    const query = `[out:json][timeout:25]; ${type}(${rawId}); out tags;`;
+    const query = `[out:json][timeout:25]; ${typeWord}(${rawId}); out tags;`;
     const res = await fetch("https://overpass-api.de/api/interpreter", {
       method: "POST",
       headers: {
