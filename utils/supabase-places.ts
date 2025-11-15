@@ -45,7 +45,9 @@ export async function fetchNearbyPlacesFromSupabase({
 
     // Map rows to OSMPlace-like structure used by the app
     const mapped: OSMPlace[] = all.slice(0, target).map((row: any) => ({
-      place_id: row.id ? String(row.id) : `sb_${row.name}_${row.lat}_${row.lon}`,
+      place_id: row.id
+        ? String(row.id)
+        : `sb_${row.name}_${row.lat}_${row.lon}`,
       lat: String(row.lat),
       lon: String(row.lon),
       display_name: row.name || "Food resource",
