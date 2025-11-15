@@ -17,55 +17,33 @@ export default function TabLayout() {
         tabBarInactiveTintColor: theme.tabIconDefault,
         headerShown: false,
         tabBarButton: HapticTab,
+        tabBarShowLabel: false,
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '600',
           letterSpacing: 0.2,
           textAlign: 'center',
-          // slightly more compact labels
-          marginBottom: Platform.OS === 'ios' ? 6 : 4,
         },
         tabBarItemStyle: {
-          justifyContent: 'center',
-          alignItems: 'center',
+           justifyContent: 'center',
+           alignItems: 'center',
+           alignSelf: 'center',
         },
-        // Floating pill-style tab bar
-        tabBarStyle: {
-          position: 'absolute',
-          left: 16,
-          right: 16,
-          bottom: Platform.OS === 'ios' ? 20 : 12,
-          height: 72,
-          borderRadius: 20,
+         tabBarStyle: {
           borderTopWidth: 0,
-          paddingBottom: Platform.OS === 'ios' ? 14 : 10,
-          paddingTop: Platform.OS === 'ios' ? 8 : 6,
-          justifyContent: 'center',
-          backgroundColor: 'transparent',
-          shadowColor: '#000',
-          shadowOpacity: 0.12,
-          shadowOffset: { width: 0, height: 10 },
-          shadowRadius: 20,
-          elevation: 18,
-          overflow: 'visible',
-        },
-        // Use a BlurView inside a rounded container so the bar looks lifted
+          height: 80,
+          paddingBottom: Platform.OS === 'ios' ? 20 : 10,
+          paddingTop: 10,
+         },
         tabBarBackground: () => (
-          <View style={{ flex: 1, paddingHorizontal: 16 }}>
-            <BlurView
-              pointerEvents="none"
-              tint="light"
-              intensity={70}
-              style={{
-                flex: 1,
-                marginHorizontal: 0,
-                marginVertical: 6,
-                borderRadius: 20,
-                backgroundColor: 'rgba(255,255,255,0.85)',
-                overflow: 'hidden',
-              }}
-            />
-          </View>
+          <BlurView
+            tint="light"
+            intensity={100}
+            style={{
+              flex: 1,
+              backgroundColor: 'rgba(255,255,255,0.9)',
+            }}
+          />
         ),
       }}>
       <Tabs.Screen
@@ -86,25 +64,17 @@ export default function TabLayout() {
         name="eligibility"
         options={{
           title: 'Eligibility',
-          tabBarIcon: ({ color }) => (
-            <IconSymbol
-              size={24}
-              name="checkmark.circle.fill"
-              color={color}
-              style={{ marginLeft: 6 }}
-            />
-          ),
+          tabBarIcon: ({ color }) => <IconSymbol size={22} name="checkmark.circle.fill" color={color} />,
+          tabBarItemStyle: {
+            justifyContent: 'center',
+            alignItems: 'center',
+            alignSelf: 'center',
+          },
           tabBarLabelStyle: {
             fontSize: 11,
             fontWeight: '600',
             letterSpacing: 0.2,
             textAlign: 'center',
-            marginTop: 0,
-            transform: [{ translateX: -6 }],
-          },
-          tabBarItemStyle: {
-            alignItems: 'center',
-            justifyContent: 'center',
           },
         }}
       />
@@ -113,12 +83,16 @@ export default function TabLayout() {
         options={{
           title: 'Favorites',
           tabBarIcon: ({ color }) => <IconSymbol size={22} name="heart.fill" color={color} />,
+          tabBarItemStyle: {
+            justifyContent: 'center',
+            alignItems: 'center',
+            alignSelf: 'center',
+          },
           tabBarLabelStyle: {
             fontSize: 11,
             fontWeight: '600',
             letterSpacing: 0.2,
             textAlign: 'center',
-            transform: [{ translateX: -10 }],
           },
         }}
       />
