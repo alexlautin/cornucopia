@@ -1,23 +1,31 @@
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { FoodLocation } from '@/constants/locations';
-import { formatDistance, getDistance } from '@/utils/distance';
+import { ThemedText } from "@/components/themed-text";
+import { ThemedView } from "@/components/themed-view";
+import { FoodLocation } from "@/constants/locations";
+import { formatDistance, getDistance } from "@/utils/distance";
 import {
   categorizePlace,
   formatOSMAddress,
   searchNearbyFoodLocations,
-} from '@/utils/osm-api';
-import * as Location from 'expo-location';
-import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+} from "@/utils/osm-api";
+import * as Location from "expo-location";
+import { useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  FlatList,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from "react-native";
 
 const DEFAULT_COORDINATE = { latitude: 33.7676, longitude: -84.3908 };
 
 const sortByDistance = (locations: FoodLocation[]) =>
   [...locations].sort((a, b) => {
-    const distA = parseFloat(a.distance || '0');
-    const distB = parseFloat(b.distance || '0');
+    const distA = parseFloat(a.distance || "0");
+    const distB = parseFloat(b.distance || "0");
     return distA - distB;
   });
 
@@ -26,17 +34,21 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [sortedLocations, setSortedLocations] = useState<FoodLocation[]>([]);
   // NEW: query/filter + last updated
-  const [query, setQuery] = useState('');
-  const filters = ['All', 'Pantry', 'Grocery', 'Market', 'Food Bank'] as const;
-  const [activeFilter, setActiveFilter] = useState<typeof filters[number]>('All');
+  const [query, setQuery] = useState("");
+  const filters = ["All", "Pantry", "Grocery", "Market", "Food Bank"] as const;
+  const [activeFilter, setActiveFilter] =
+    useState<(typeof filters)[number]>("All");
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const hasInitialLoad = useRef(false);
   const isInitializing = useRef(true); // NEW: track true initialization
   const router = useRouter();
   const formattedLastUpdated = useMemo(() => {
-    if (!lastUpdated) return '';
+    if (!lastUpdated) return "";
     try {
-      return new Date(lastUpdated).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      return new Date(lastUpdated).toLocaleTimeString([], {
+        hour: "numeric",
+        minute: "2-digit",
+      });
     } catch {
       return new Date(lastUpdated).toISOString();
     }
@@ -44,31 +56,31 @@ export default function HomeScreen() {
 
   // Minimal emoji for type indicator
   const typeEmoji = useCallback((t?: string) => {
-    if (!t) return '🏬';
+    if (!t) return "🏬";
     const normalized = t.toLowerCase();
     const map: Record<string, string> = {
-      'food bank': '🥫',
-      'food pantry': '🥫',
-      'soup kitchen': '🍲',
-      'meal delivery': '🚚',
-      'community center': '🏘️',
-      'place of worship': '⛪',
-      charity: '💝',
-      'social facility': '🤝',
-      supermarket: '🛒',
-      'grocery store': '🛒',
-      greengrocer: '🥦',
-      'convenience store': '🏪',
-      bakery: '🥐',
-      deli: '🥪',
-      market: '🧺',
-      'farmers market': '🧺',
+      "food bank": "🥫",
+      "food pantry": "🥫",
+      "soup kitchen": "🍲",
+      "meal delivery": "🚚",
+      "community center": "🏘️",
+      "place of worship": "⛪",
+      charity: "💝",
+      "social facility": "🤝",
+      supermarket: "🛒",
+      "grocery store": "🛒",
+      greengrocer: "🥦",
+      "convenience store": "🏪",
+      bakery: "🥐",
+      deli: "🥪",
+      market: "🧺",
+      "farmers market": "🧺",
     };
     if (map[normalized]) return map[normalized];
-    if (/bank|pantry|fridge/.test(normalized)) return '🥫';
-    if (/market|farmer/.test(normalized)) return '🧺';
-    if (/grocery|supermarket|store/.test(normalized)) return '🛒';
-    return '🏬';
+    if (/bank|pantry|fridge/.test(normalized)) return "🥫";
+    if (/market|farmer/.test(normalized)) return "🧺";
+    if (/grocery|supermarket|store/.test(normalized)) return "🛒";
+    return "🏬";
   }, []);
 
   // Helper: parse "0.8 mi" or "500 ft" into miles
@@ -87,26 +99,30 @@ export default function HomeScreen() {
 
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        console.log('Location permission not granted');
+      if (status !== "granted") {
+        console.log("Location permission not granted");
         setLoading(false);
         hasInitialLoad.current = true;
         isInitializing.current = false;
         return;
       }
 
-      console.log('Getting current position...');
+      console.log("Getting current position...");
       const locationData = await Location.getCurrentPositionAsync({});
-      console.log('Current position:', locationData.coords.latitude, locationData.coords.longitude);
+      console.log(
+        "Current position:",
+        locationData.coords.latitude,
+        locationData.coords.longitude
+      );
 
       // Only fetch OSM data with larger radius
-      console.log('Fetching OSM data...');
-      
+      console.log("Fetching OSM data...");
+
       // Add timeout protection
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Request timeout after 30s')), 30000);
+        setTimeout(() => reject(new Error("Request timeout after 30s")), 30000);
       });
-      
+
       const osmPlaces = await Promise.race([
         searchNearbyFoodLocations(
           locationData.coords.latitude,
@@ -114,13 +130,13 @@ export default function HomeScreen() {
           10, // Increased from default 5km to 10km
           force ? { force: true } : undefined // bypass caches on manual refresh
         ),
-        timeoutPromise
+        timeoutPromise,
       ]);
 
       console.log(`Fetched ${osmPlaces.length} places from OSM`);
 
       if (osmPlaces.length === 0) {
-        console.warn('No OSM places found in the area');
+        console.warn("No OSM places found in the area");
         setSortedLocations([]);
         setLastUpdated(Date.now());
         hasInitialLoad.current = true;
@@ -138,7 +154,7 @@ export default function HomeScreen() {
         );
         return {
           id: place.place_id || `osm-${index}`,
-          name: place.display_name.split(',')[0],
+          name: place.display_name.split(",")[0],
           address: formatOSMAddress(place),
           type: categorizePlace(place),
           coordinate: {
@@ -151,14 +167,14 @@ export default function HomeScreen() {
 
       console.log(`Mapped ${nextLocations.length} locations`);
       const sorted = sortByDistance(nextLocations);
-      console.log('Setting sorted locations...');
+      console.log("Setting sorted locations...");
       setSortedLocations(sorted);
       setLastUpdated(Date.now());
       hasInitialLoad.current = true;
       isInitializing.current = false;
-      console.log('Location fetch complete');
+      console.log("Location fetch complete");
     } catch (error) {
-      console.error('Error getting location:', error);
+      console.error("Error getting location:", error);
       hasInitialLoad.current = true;
       isInitializing.current = false;
       // Don't set fallback data on error
@@ -194,41 +210,56 @@ export default function HomeScreen() {
     const q = query.trim().toLowerCase();
     let list = [...sortedLocations];
 
-    if (activeFilter !== 'All') {
+    if (activeFilter !== "All") {
       list = list.filter((l) => {
-        const t = (l.type || '').toLowerCase();
-        if (activeFilter === 'Pantry') return /pantry|fridge/.test(t);
-        if (activeFilter === 'Grocery') return /grocery|supermarket|store/.test(t);
-        if (activeFilter === 'Market') return /market|farmer/.test(t);
-        if (activeFilter === 'Food Bank') return /bank/.test(t);
+        const t = (l.type || "").toLowerCase();
+        if (activeFilter === "Pantry") return /pantry|fridge/.test(t);
+        if (activeFilter === "Grocery")
+          return /grocery|supermarket|store/.test(t);
+        if (activeFilter === "Market") return /market|farmer/.test(t);
+        if (activeFilter === "Food Bank") return /bank/.test(t);
         return true;
       });
     }
 
     if (q.length) {
-      list = list.filter((l) => (l.name || '').toLowerCase().includes(q) || (l.address || '').toLowerCase().includes(q));
+      list = list.filter(
+        (l) =>
+          (l.name || "").toLowerCase().includes(q) ||
+          (l.address || "").toLowerCase().includes(q)
+      );
     }
 
     return list;
   }, [sortedLocations, activeFilter, query]);
 
   // Dynamic Food Access Score based on nearest distance
-  const nearestMi = useMemo(() => toMiles(filteredLocations[0]?.distance || sortedLocations[0]?.distance), [filteredLocations, sortedLocations]);
+  const nearestMi = useMemo(
+    () =>
+      toMiles(filteredLocations[0]?.distance || sortedLocations[0]?.distance),
+    [filteredLocations, sortedLocations]
+  );
   const score = useMemo(() => {
     const miles = nearestMi;
     // Don't show UNKNOWN during initial load
     if (!hasInitialLoad.current || !Number.isFinite(miles)) {
-      return { label: 'LOADING', pct: 0.25, color: '#6b7280', hint: 'Finding food options near you...' };
+      return {
+        label: "LOADING",
+        pct: 0.25,
+        color: "#6b7280",
+        hint: "Finding food options near you...",
+      };
     }
     const pct = Math.max(0.06, 1 - Math.min(miles / 3, 1));
-    const label = miles <= 0.5 ? 'HIGH' : miles <= 1.5 ? 'MEDIUM' : 'LOW';
-    const color = label === 'HIGH' ? '#15803d' : label === 'MEDIUM' ? '#f59e0b' : '#b91c1c';
+    const label = miles <= 0.5 ? "HIGH" : miles <= 1.5 ? "MEDIUM" : "LOW";
+    const color =
+      label === "HIGH" ? "#15803d" : label === "MEDIUM" ? "#f59e0b" : "#b91c1c";
     const hint =
-      label === 'HIGH'
-        ? 'Plenty of options within a short walk.'
-        : label === 'MEDIUM'
-        ? 'Some options are nearby.'
-        : 'Few fresh food options within walking distance.';
+      label === "HIGH"
+        ? "Plenty of options within a short walk."
+        : label === "MEDIUM"
+        ? "Some options are nearby."
+        : "Few fresh food options within walking distance.";
     return { label, pct, color, hint };
   }, [nearestMi, hasInitialLoad.current]);
 
@@ -255,16 +286,31 @@ export default function HomeScreen() {
             returnKeyType="search"
           />
           {query.length > 0 && (
-            <Pressable onPress={() => setQuery('')} style={styles.clearBtn}>
+            <Pressable onPress={() => setQuery("")} style={styles.clearBtn}>
               <ThemedText style={styles.clearTxt}>✕</ThemedText>
             </Pressable>
           )}
         </View>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipsRow}
+        >
           {filters.map((f) => (
-            <Pressable key={f} onPress={() => setActiveFilter(f)} style={[styles.chip, activeFilter === f && styles.chipActive]}>
-              <ThemedText style={[styles.chipText, activeFilter === f && styles.chipTextActive]}>{f}</ThemedText>
+            <Pressable
+              key={f}
+              onPress={() => setActiveFilter(f)}
+              style={[styles.chip, activeFilter === f && styles.chipActive]}
+            >
+              <ThemedText
+                style={[
+                  styles.chipText,
+                  activeFilter === f && styles.chipTextActive,
+                ]}
+              >
+                {f}
+              </ThemedText>
             </Pressable>
           ))}
         </ScrollView>
@@ -273,11 +319,22 @@ export default function HomeScreen() {
       {/* FOOD ACCESS SCORE CARD */}
       <ThemedView style={[styles.scoreCard, styles.elevated]}>
         <ThemedText type="subtitle">Food Access Score</ThemedText>
-        <ThemedText type="title" style={[styles.scoreValue, { color: score.color }]}>
+        <ThemedText
+          type="title"
+          style={[styles.scoreValue, { color: score.color }]}
+        >
           {score.label}
         </ThemedText>
         <View style={styles.progressBar}>
-          <View style={[styles.progressFill, { width: `${Math.round(score.pct * 100)}%`, backgroundColor: score.color }]} />
+          <View
+            style={[
+              styles.progressFill,
+              {
+                width: `${Math.round(score.pct * 100)}%`,
+                backgroundColor: score.color,
+              },
+            ]}
+          />
         </View>
         <ThemedText style={styles.scoreDescription}>{score.hint}</ThemedText>
       </ThemedView>
@@ -288,8 +345,12 @@ export default function HomeScreen() {
       </ThemedText>
       {lastUpdated !== null && !isInitializing.current && (
         <ThemedText style={styles.resultsMeta}>
-          Showing {filteredLocations.length} result{filteredLocations.length === 1 ? '' : 's'}
-          {filteredLocations.length !== sortedLocations.length ? ` (of ${sortedLocations.length} total)` : ''} · Updated {formattedLastUpdated}
+          Showing {filteredLocations.length} result
+          {filteredLocations.length === 1 ? "" : "s"}
+          {filteredLocations.length !== sortedLocations.length
+            ? ` (of ${sortedLocations.length} total)`
+            : ""}{" "}
+          · Updated {formattedLastUpdated}
         </ThemedText>
       )}
 
@@ -302,26 +363,36 @@ export default function HomeScreen() {
         <FlatList
           data={filteredLocations}
           keyExtractor={(item) => item.id}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
           onEndReached={onEndReached}
           onEndReachedThreshold={0.2}
           contentContainerStyle={{ paddingBottom: 28 }}
           ListEmptyComponent={
-            <View style={{ padding: 24, alignItems: 'center' }}>
+            <View style={{ padding: 24, alignItems: "center" }}>
               <ThemedText style={{ opacity: 0.7, marginBottom: 8 }}>
                 No locations found nearby.
               </ThemedText>
-              <Pressable onPress={() => { setQuery(''); setActiveFilter('All'); }} style={styles.resetBtn}>
-                <ThemedText style={{ color: 'white', fontWeight: '600' }}>Clear filters</ThemedText>
+              <Pressable
+                onPress={() => {
+                  setQuery("");
+                  setActiveFilter("All");
+                }}
+                style={styles.resetBtn}
+              >
+                <ThemedText style={{ color: "white", fontWeight: "600" }}>
+                  Clear filters
+                </ThemedText>
               </Pressable>
             </View>
           }
           renderItem={({ item }) => (
             <Pressable
-              android_ripple={{ color: '#00000010' }}
+              android_ripple={{ color: "#00000010" }}
               onPress={() =>
                 router.push({
-                  pathname: '/option/[id]',
+                  pathname: "/option/[id]",
                   params: {
                     id: item.id,
                     name: item.name,
@@ -331,27 +402,41 @@ export default function HomeScreen() {
                   },
                 })
               }
-              style={({ pressed }) => [styles.optionCard, styles.cardElevated, pressed && styles.cardPressed]}
+              style={({ pressed }) => [
+                styles.optionCard,
+                styles.cardElevated,
+                pressed && styles.cardPressed,
+              ]}
             >
               <View style={styles.cardRow}>
                 <View style={styles.leading}>
                   <View style={styles.leadingIcon}>
-                    <ThemedText style={styles.leadingEmoji}>{typeEmoji(item.type)}</ThemedText>
+                    <ThemedText style={styles.leadingEmoji}>
+                      {typeEmoji(item.type)}
+                    </ThemedText>
                   </View>
                 </View>
 
                 <View style={styles.middle}>
                   <View style={styles.titleRow}>
-                    <ThemedText type="defaultSemiBold" numberOfLines={1} style={styles.optionTitle}>
+                    <ThemedText
+                      type="defaultSemiBold"
+                      numberOfLines={1}
+                      style={styles.optionTitle}
+                    >
                       {item.name}
                     </ThemedText>
-                    <ThemedText style={styles.distancePill}>{item.distance}</ThemedText>
+                    <ThemedText style={styles.distancePill}>
+                      {item.distance}
+                    </ThemedText>
                   </View>
 
                   <View style={styles.subRow}>
                     <View style={styles.metaRow}>
                       <View style={styles.metaDot} />
-                      <ThemedText style={styles.subtleText} numberOfLines={1}>{item.type}</ThemedText>
+                      <ThemedText style={styles.subtleText} numberOfLines={1}>
+                        {item.type}
+                      </ThemedText>
                     </View>
                   </View>
 
@@ -367,7 +452,7 @@ export default function HomeScreen() {
                   style={styles.chevronButton}
                   onPress={() => {
                     router.push({
-                      pathname: '/option/[id]',
+                      pathname: "/option/[id]",
                       params: {
                         id: item.id,
                         name: item.name,
@@ -412,14 +497,14 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   searchBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f3f4f6',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f3f4f6",
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: "#e5e7eb",
   },
   searchIcon: {
     fontSize: 16,
@@ -436,11 +521,11 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#e5e7eb',
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#e5e7eb",
   },
-  clearTxt: { fontWeight: '700', opacity: 0.7 },
+  clearTxt: { fontWeight: "700", opacity: 0.7 },
   chipsRow: {
     gap: 8,
     paddingTop: 10,
@@ -449,28 +534,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: "#f3f4f6",
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: "#e5e7eb",
     marginRight: 8,
   },
   chipActive: {
-    backgroundColor: '#1a73e8',
-    borderColor: '#1a73e8',
+    backgroundColor: "#1a73e8",
+    borderColor: "#1a73e8",
   },
-  chipText: { fontSize: 13, color: '#374151' },
-  chipTextActive: { color: 'white', fontWeight: '600' },
+  chipText: { fontSize: 13, color: "#374151" },
+  chipTextActive: { color: "white", fontWeight: "600" },
 
   // Score card
   scoreCard: {
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e5e5e5',
-    backgroundColor: 'white',
+    borderColor: "#e5e5e5",
+    backgroundColor: "white",
   },
   elevated: {
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOpacity: 0.06,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
@@ -478,18 +563,18 @@ const styles = StyleSheet.create({
   },
   scoreValue: {
     fontSize: 30,
-    fontWeight: '700',
+    fontWeight: "700",
     marginVertical: 4,
   },
   progressBar: {
     height: 8,
     borderRadius: 6,
-    backgroundColor: '#eef2f7',
-    overflow: 'hidden',
+    backgroundColor: "#eef2f7",
+    overflow: "hidden",
     marginVertical: 8,
   },
   progressFill: {
-    height: '100%',
+    height: "100%",
     borderRadius: 6,
   },
   scoreDescription: {
@@ -501,7 +586,7 @@ const styles = StyleSheet.create({
   },
   resultsMeta: {
     fontSize: 12,
-    color: '#6b7280',
+    color: "#6b7280",
     marginBottom: 4,
   },
 
@@ -510,12 +595,12 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 12,
     borderWidth: 0,
-    borderColor: 'transparent',
-    backgroundColor: 'white',
+    borderColor: "transparent",
+    backgroundColor: "white",
     marginVertical: 6,
   },
   cardElevated: {
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOpacity: 0.04,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 3 },
@@ -526,8 +611,8 @@ const styles = StyleSheet.create({
     opacity: 0.98,
   },
   cardRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   leading: {
     marginRight: 12,
@@ -536,15 +621,15 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f3f4f6',
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f3f4f6",
   },
   leadingEmoji: { fontSize: 18 },
   middle: { flex: 1 },
   titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   optionTitle: {
     flex: 1,
@@ -556,31 +641,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 999,
-    backgroundColor: '#f3f4f6',
-    color: '#374151',
+    backgroundColor: "#f3f4f6",
+    color: "#374151",
   },
   subRow: {
     marginTop: 4,
     marginBottom: 2,
   },
   metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   metaDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#a3a3a3',
+    backgroundColor: "#a3a3a3",
     marginRight: 6,
   },
   subtleText: {
     fontSize: 12,
-    color: '#6b7280',
+    color: "#6b7280",
   },
   addrRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginTop: 4,
   },
   addrIcon: {
@@ -589,45 +674,41 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   optionAddress: {
-  },flex: 1,
-  optionAddress: {
-    flex: 1,ton: {
-  },marginLeft: 8,
-  chevronButton: {tal: 2,
-    marginLeft: 8,l: 2,
+    flex: 1,
+  },
+  chevronButton: {
+    marginLeft: 8,
     paddingHorizontal: 2,
     paddingVertical: 2,
-  },color: '#9ca3af',
-  chevron: {ht: '700',
-    color: '#9ca3af',
-    fontWeight: '700',
+  },
+  chevron: {
+    color: "#9ca3af",
+    fontWeight: "700",
     fontSize: 18,
     lineHeight: 18,
-  }, ADD: loading + skeleton styles (fix corrupted section)
-  loadingContainer: {
-  // ADD: loading + skeleton styles (fix corrupted section)
+  },
   loadingContainer: {
     padding: 16,
-    alignItems: 'center',textAlign: 'center',
-    justifyContent: 'center',80',
-  },6,
-  loadingText: {20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingText: {
     fontSize: 16,
     opacity: 0.7,
-  },backgroundColor: '#1a73e8',
-  skeletonCard: {rizontal: 14,
+  },
+  skeletonCard: {
     height: 72,
     borderRadius: 12,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: "#f3f4f6",
     marginVertical: 6,
-  }, Keep existing legacy refs (deduplicated)
-  resetBtn: {  optionType: { opacity: 0.7, marginTop: 2 },
-    backgroundColor: '#1a73e8',m: 2 },
-    paddingHorizontal: 14,tWeight: '600' },
+  },
+  resetBtn: {
+    backgroundColor: "#1a73e8",
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 999,  },
-  // Keep existing legacy refs (deduplicated)
+    borderRadius: 999,
+  },
   optionType: { opacity: 0.7, marginTop: 2 },
   optionDistance: { opacity: 0.6, marginBottom: 2 },
-  directionsTextLegacy: { color: 'white', fontWeight: '600' },
+  directionsTextLegacy: { color: "white", fontWeight: "600" },
 });
