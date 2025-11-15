@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
+import { Alert, Clipboard, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -143,12 +143,9 @@ export default function OptionDetailsScreen() {
       return;
     } catch {
       try {
-        const Clip = await import('expo-clipboard');
-        if (Clip && typeof Clip.setStringAsync === 'function') {
-          await Clip.setStringAsync(summary);
-          Alert.alert('Copied to clipboard', 'Share sheet failed — details copied to clipboard.');
-          return;
-        }
+        Clipboard.setString(summary);
+        Alert.alert('Copied to clipboard', 'Share sheet failed — details copied to clipboard.');
+        return;
       } catch {
         // ignore
       }
@@ -229,7 +226,6 @@ export default function OptionDetailsScreen() {
             <ThemedText style={styles.snapLabelText}>SNAP</ThemedText>
           </View>
         ) : null}
-      </View>
 
         <ThemedView style={styles.card}>
           <ThemedText type="subtitle" style={{ marginBottom: 8 }}>

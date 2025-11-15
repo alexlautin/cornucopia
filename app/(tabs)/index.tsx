@@ -224,15 +224,6 @@ export default function HomeScreen() {
     setTimeout(() => setRefreshing(false), MIN_SPINNER_MS);
   }, [refreshing, getCurrentLocation]);
 
-  // Guarded onEndReached: only try to fetch more when there is something to paginate,
-  // and when we're not already loading/refreshing/initializing.
-  const onEndReached = useCallback(() => {
-    if (loading || refreshing || isInitializing.current) return;
-    // If the active filter results in zero visible items, don't trigger another fetch.
-    if (!filteredLocations || filteredLocations.length === 0) return;
-    void getCurrentLocation(true);
-  }, [getCurrentLocation, loading, refreshing, filteredLocations, isInitializing]);
-
   const filteredLocations = useMemo(() => {
     const q = query.trim().toLowerCase();
     let list = [...sortedLocations];
@@ -254,6 +245,15 @@ export default function HomeScreen() {
 
     return list;
   }, [sortedLocations, activeFilter, query]);
+
+  // Guarded onEndReached: only try to fetch more when there is something to paginate,
+  // and when we're not already loading/refreshing/initializing.
+  const onEndReached = useCallback(() => {
+    if (loading || refreshing || isInitializing.current) return;
+    // If the active filter results in zero visible items, don't trigger another fetch.
+    if (!filteredLocations || filteredLocations.length === 0) return;
+    void getCurrentLocation(true);
+  }, [getCurrentLocation, loading, refreshing, filteredLocations, isInitializing]);
 
   const nearestMi = useMemo(() => toMiles(filteredLocations[0]?.distance || sortedLocations[0]?.distance), [filteredLocations, sortedLocations]);
   const score = useMemo(() => {

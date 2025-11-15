@@ -165,43 +165,21 @@ export default function TabTwoScreen() {
           }
         }
 
-      console.log('Fetching OSM data...');
-      // Fetch real data from OSM
-      const osmPlaces = await searchNearbyFoodLocations(
-        location.coords.latitude,
-        location.coords.longitude,
-        undefined,
-        (opts?.force || !hasLoadedRef.current) ? { force: true } : undefined
-      );
-
-        console.log('Fetching OSM data for center:', centerLat, centerLon, 'radiusMeters:', radiusMeters);
-        const osmPlaces = await searchNearbyFoodLocations(centerLat, centerLon, radiusMeters);
+        console.log('Fetching OSM data for center:', centerLat, centerLon);
+        // Fetch real data from OSM
+        const osmPlaces = await searchNearbyFoodLocations(
+          centerLat,
+          centerLon,
+          undefined,
+          (opts?.force || !hasLoadedRef.current) ? { force: true } : undefined
+        );
 
         console.log(`Found ${osmPlaces.length} OSM places`);
 
-        const mappedLocations: FoodLocation[] = validPlaces.map((place, index) => ({
-          id: place.place_id || `osm-${index}`,
-          name: place.display_name.split(',')[0],
-          address: formatOSMAddress(place),
-          type: categorizePlace(place),
-          coordinate: {
-            latitude: parseFloat(place.lat),
-            longitude: parseFloat(place.lon),
-          },
-          distance: formatDistance(
-            getDistance(
-              location.coords.latitude,
-              location.coords.longitude,
-              parseFloat(place.lat),
-              parseFloat(place.lon)
-            )
-          ),
-          snap: (place as any).snap ? true : false,
-        }));
-
-          const mappedLocations: FoodLocation[] = validPlaces.map((place, index) => {
-            const lat = parseFloat(place.lat);
-            const lon = parseFloat(place.lon);
+        if (osmPlaces && osmPlaces.length > 0) {
+          const mappedLocations: FoodLocation[] = osmPlaces.map((place, index) => {
+            const lat = parseFloat(place.lat ?? '0');
+            const lon = parseFloat(place.lon ?? '0');
             const distMiles = getDistance(centerLat, centerLon, lat, lon);
             return {
               id: place.place_id || `osm-${index}`,
