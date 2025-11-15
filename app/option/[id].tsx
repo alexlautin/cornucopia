@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, Share, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -55,6 +55,47 @@ export default function OptionDetailsScreen() {
     };
   }, [params.id]);
 
+  // --- New: build a concise shareable summary for this place ---
+  const formatPlaceShare = () => {
+    const parts: string[] = [];
+    parts.push(name);
+    if (type) parts.push(`Type: ${type}`);
+    if (distance) parts.push(`Distance: ${distance}`);
+    if (address) parts.push(`Address: ${address}`);
+    if (hours && hours.length > 0) parts.push(`Hours: ${hours.join('; ')}`);
+    parts.push('', 'Found with Cornucopia');
+    return parts.join('\n');
+  };
+
+  // --- New: share handler with dynamic clipboard fallback ---
+  const handleSharePlace = async () => {
+    const summary = formatPlaceShare();
+    try {
+      await Share.share({ title: `Location: ${name}`, message: summary });
+      return;
+    } catch {
+      try {
+        const Clip = await import('expo-clipboard');
+        if (Clip && typeof Clip.setStringAsync === 'function') {
+          await Clip.setStringAsync(summary);
+          Alert.alert('Copied to clipboard', 'Share sheet failed — details copied to clipboard.');
+          return;
+        }
+      } catch {
+        // ignore
+      }
+
+      Alert.alert(
+        'Share failed',
+        'Unable to open share sheet or copy to clipboard. Tap "Show" to view the summary and copy it manually.',
+        [
+          { text: 'Show', onPress: () => Alert.alert('Place summary', summary) },
+          { text: 'OK', style: 'cancel' },
+        ]
+      );
+    }
+  };
+
   const handleQuickNavigation = () => {
     if (latitude && longitude) {
       openNavigation({
@@ -81,9 +122,12 @@ export default function OptionDetailsScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <ThemedText type="title" style={styles.title}>
-        {name}
-      </ThemedText>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <ThemedText type="title" style={styles.title}>{name}</ThemedText>
+        <Pressable onPress={handleSharePlace} style={styles.headerShareBtn}>
+          <ThemedText style={styles.headerShareText}>Share</ThemedText>
+        </Pressable>
+      </View>
       
       <View style={styles.metaContainer}>
         {distance ? (
@@ -202,5 +246,18 @@ const styles = StyleSheet.create({
     color: '#2563eb',
     fontSize: 14,
     fontWeight: '600',
+  },
+  headerShareBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#eef6ff',
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+    alignSelf: 'flex-start',
+  },
+  headerShareText: {
+    color: '#1a73e8',
+    fontWeight: '700',
   },
 });

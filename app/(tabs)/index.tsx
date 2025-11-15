@@ -13,7 +13,7 @@ import {
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { FlatList, LayoutAnimation, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, UIManager, View } from 'react-native';
 
 const DEFAULT_COORDINATE = { latitude: 33.7676, longitude: -84.3908 };
 
@@ -330,6 +330,63 @@ export default function HomeScreen() {
     [reverseGeocodeCoords, router]
   );
 
+  // Enable LayoutAnimation on Android
+  useEffect(() => {
+    if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+      UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
+  }, []);
+
+  // Track which item is expanded and cache of resolved details (address / hours)
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedDetails, setExpandedDetails] = useState<Record<string, { address?: string | null; hours?: string[] | null; loading?: boolean }>>({});
+
+  // Toggle expand with prefetch (reverse geocode + opening hours)
+  const toggleExpand = useCallback(
+    async (item: FoodLocation) => {
+      const id = item.id;
+      const isCurrentlyExpanded = expandedId === id;
+
+      // collapse
+      if (isCurrentlyExpanded) {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setExpandedId(null);
+        return;
+      }
+
+      // expand
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setExpandedId(id);
+      setExpandedDetails((p) => ({ ...p, [id]: { ...(p[id] || {}), loading: true } }));
+
+      try {
+        // Resolve address if missing/placeholder
+        let address = item.address;
+        if (!address || /^\d+\.\d+,\s*-?\d+\.\d+/.test(address)) {
+          const resolved = await reverseGeocodeCoords(item.coordinate.latitude, item.coordinate.longitude);
+          address = resolved || address;
+        }
+
+        // Best-effort fetch opening hours
+        let hours: string[] | null = null;
+        try {
+          if (item.id) {
+            const fetched = await getOpeningHours(String(item.id));
+            if (fetched && fetched.length > 0) hours = fetched;
+          }
+        } catch (e) {
+          console.warn('prefetch getOpeningHours failed', e);
+        }
+
+        setExpandedDetails((p) => ({ ...p, [id]: { address, hours, loading: false } }));
+      } catch (err) {
+        console.warn('toggleExpand error', err);
+        setExpandedDetails((p) => ({ ...p, [id]: { ...(p[id] || {}), loading: false } }));
+      }
+    },
+    [expandedId, reverseGeocodeCoords]
+  );
+
   return (
     <ThemedView style={styles.container}>
       {/* Sticky header */}
@@ -414,7 +471,7 @@ export default function HomeScreen() {
         renderItem={({ item }) => (
           <Pressable
             android_ripple={{ color: '#00000010' }}
-            onPress={() => void openDetailsWithPrefetch(item)}
+            onPress={() => void toggleExpand(item)}
             style={({ pressed }) => [styles.optionCard, styles.cardElevated, pressed && styles.cardPressed]}
           >
             <View style={styles.cardRow}>
@@ -441,27 +498,78 @@ export default function HomeScreen() {
                   <ThemedText style={styles.addrIcon}>📍</ThemedText>
                   <ThemedText style={styles.optionAddress} numberOfLines={1}>{item.address}</ThemedText>
                 </View>
+
+                {/* Inline expanded content (shows resolved address, opening hours, actions) */}
+                {expandedId === item.id && (
+                  <View style={styles.expandedContent}>
+                    {expandedDetails[item.id]?.loading ? (
+                      <ThemedText style={{ marginTop: 8, opacity: 0.8 }}>Loading details...</ThemedText>
+                    ) : (
+                      <>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10 }}>
+                          <IconSymbol name="mappin" size={16} color="#6b7280" />
+                          <ThemedText style={{ marginLeft: 8, flex: 1 }}>
+                            {expandedDetails[item.id]?.address ?? item.address}
+                          </ThemedText>
+                        </View>
+
+                        {expandedDetails[item.id]?.hours && expandedDetails[item.id].hours!.length > 0 && (
+                          <View style={{ marginTop: 8 }}>
+                            <ThemedText type="subtitle" style={{ marginBottom: 4 }}>Opening hours</ThemedText>
+                            {expandedDetails[item.id].hours!.map((h, idx) => (
+                              <ThemedText key={idx} style={{ fontSize: 13 }}>{h}</ThemedText>
+                            ))}
+                          </View>
+                        )}
+
+                        <View style={{ flexDirection: 'row', marginTop: 12, justifyContent: 'flex-end' }}>
+                          <Pressable
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              handleQuickNavigation(item, e);
+                            }}
+                            style={styles.smallBtn}
+                          >
+                            <ThemedText style={{ color: 'white', fontWeight: '600' }}>Navigate</ThemedText>
+                          </Pressable>
+
+                          <Pressable
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              router.push({
+                                pathname: '/option/[id]',
+                                params: {
+                                  id: item.id,
+                                  name: item.name,
+                                  type: item.type,
+                                  address: expandedDetails[item.id]?.address ?? item.address,
+                                  distance: item.distance,
+                                  latitude: item.coordinate.latitude.toString(),
+                                  longitude: item.coordinate.longitude.toString(),
+                                },
+                              });
+                            }}
+                            style={[styles.smallBtn, styles.smallBtnOutline]}
+                          >
+                            <ThemedText style={{ fontWeight: '600' }}>Open</ThemedText>
+                          </Pressable>
+                        </View>
+                      </>
+                    )}
+                  </View>
+                )}
               </View>
 
               <Pressable
                 style={styles.chevronButton}
-                onPress={() =>
-                  router.push({
-                    pathname: '/option/[id]',
-                    params: {
-                      id: item.id,
-                      name: item.name,
-                      type: item.type,
-                      address: item.address,
-                      distance: item.distance,
-                      latitude: item.coordinate.latitude.toString(),
-                      longitude: item.coordinate.longitude.toString(),
-                    },
-                  })
-                }
+                onPress={(e) => {
+                  // Prevent the outer Pressable from also receiving this press.
+                  e.stopPropagation?.();
+                  void toggleExpand(item);
+                }}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <ThemedText style={styles.chevron}>›</ThemedText>
+                <ThemedText style={styles.chevron}>{expandedId === item.id ? '‹' : '›'}</ThemedText>
               </Pressable>
             </View>
           </Pressable>
@@ -565,4 +673,21 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 18 },
   resetBtn: { backgroundColor: '#1a73e8', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999 },
+  // Expanded panel styles
+  expandedContent: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
+  },
+  smallBtn: {
+    backgroundColor: '#1a73e8',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  smallBtnOutline: {
+    backgroundColor: '#eef2f7',
+    marginLeft: 8,
+  },
 });
