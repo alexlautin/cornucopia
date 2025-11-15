@@ -23,11 +23,23 @@ async function geocodeAddress(address: string): Promise<{ lat: number; lon: numb
 }
 
 export default function EventsScreen() {
+
   const [name, setName] = useState('');
   const [type, setType] = useState('');
   const [description, setDescription] = useState('');
-  const [startDateTime, setStartDateTime] = useState('');
-  const [endDateTime, setEndDateTime] = useState('');
+  // Date/time fields
+  const now = new Date();
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  const defaultDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const defaultTime = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
+  const defaultEndDate = `${oneHourLater.getFullYear()}-${pad(oneHourLater.getMonth() + 1)}-${pad(oneHourLater.getDate())}`;
+  const defaultEndTime = `${pad(oneHourLater.getHours())}:${pad(oneHourLater.getMinutes())}`;
+
+  const [startDate, setStartDate] = useState(defaultDate);
+  const [startTime, setStartTime] = useState(defaultTime);
+  const [endDate, setEndDate] = useState(defaultEndDate);
+  const [endTime, setEndTime] = useState(defaultEndTime);
   const [street, setStreet] = useState('');
   const [apartment, setApartment] = useState('');
   const [city, setCity] = useState('');
@@ -36,13 +48,25 @@ export default function EventsScreen() {
 
   const [submitting, setSubmitting] = useState(false);
 
+  // Helper: validate date (YYYY-MM-DD) and time (HH:MM, 24h)
+  function isValidDate(str: string) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(str) && !isNaN(new Date(str).getTime());
+  }
+  function isValidTime(str: string) {
+    return /^([01]\d|2[0-3]):[0-5]\d$/.test(str);
+  }
+
   const handleSubmit = useCallback(async () => {
     if (!name.trim()) {
       Alert.alert('Missing name', 'Please enter an event name.');
       return;
     }
-    if (!startDateTime.trim() || !endDateTime.trim()) {
-      Alert.alert('Missing date/time', 'Please enter both start and end date/time for the event.');
+    if (!isValidDate(startDate) || !isValidTime(startTime)) {
+      Alert.alert('Invalid start date/time', 'Start date must be YYYY-MM-DD and time must be HH:MM (24h).');
+      return;
+    }
+    if (!isValidDate(endDate) || !isValidTime(endTime)) {
+      Alert.alert('Invalid end date/time', 'End date must be YYYY-MM-DD and time must be HH:MM (24h).');
       return;
     }
     if (!street.trim() || !city.trim() || !state.trim()) {
@@ -53,7 +77,6 @@ export default function EventsScreen() {
     try {
       // Build full address string for geocoding
       const fullAddress = `${street}${apartment ? ', ' + apartment : ''}, ${city}, ${state} ${postalCode}`;
-      
       // Attempt to geocode the full address to get lat/lon
       const geocoded = await geocodeAddress(fullAddress);
       const lat = geocoded?.lat ?? null;
@@ -72,26 +95,11 @@ export default function EventsScreen() {
 
       const rawTags = JSON.stringify({ name: name || null, type: type || null, source: 'user' });
 
-      // Build event_hours JSONB from start and end datetimes
-      // Format: { "DayName": "HH:MM-HH:MM" }
+      // Build event_hours JSONB from start/end date/time
       let eventHours: any = null;
-      if (startDateTime.trim() && endDateTime.trim()) {
-        // Parse start datetime: format should be "YYYY-MM-DD HH:MM"
-        const startParts = startDateTime.split(' ');
-        const endParts = endDateTime.split(' ');
-        
-        if (startParts.length >= 2 && endParts.length >= 2) {
-          const startDate = new Date(startParts[0]);
-          const startTime = startParts[1];
-          const endTime = endParts[1];
-          
-          if (!isNaN(startDate.getTime())) {
-            const dayOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][
-              startDate.getDay()
-            ];
-            eventHours = { [dayOfWeek]: `${startTime}-${endTime}` };
-          }
-        }
+      console.log('Validating event hours', { startDate, startTime, endDate, endTime });
+      if (isValidDate(startDate) && isValidTime(startTime) && isValidDate(endDate) && isValidTime(endTime)) {
+        eventHours = { [startDate]: {"start": startTime, "end": endTime} };
       }
 
       const row = {
@@ -118,8 +126,10 @@ export default function EventsScreen() {
         setName('');
         setType('');
         setDescription('');
-        setStartDateTime('');
-        setEndDateTime('');
+        setStartDate(defaultDate);
+        setStartTime(defaultTime);
+        setEndDate(defaultEndDate);
+        setEndTime(defaultEndTime);
         setStreet('');
         setApartment('');
         setCity('');
@@ -132,7 +142,7 @@ export default function EventsScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [name, type, description, startDateTime, endDateTime, street, apartment, city, state, postalCode]);
+  }, [name, type, description, startDate, startTime, endDate, endTime, street, apartment, city, state, postalCode, defaultDate, defaultTime, defaultEndDate, defaultEndTime]);
 
   return (
     <ThemedView style={styles.container}>
@@ -157,7 +167,7 @@ export default function EventsScreen() {
           <TextInput style={styles.input} value={type} onChangeText={setType} placeholder="e.g. Food distribution, Meeting" />
         </View>
 
-        <View style={styles.field}>
+        {/* <View style={styles.field}>
           <ThemedText style={styles.label}>Description</ThemedText>
           <TextInput
             style={[styles.input, styles.multiline]}
@@ -167,25 +177,53 @@ export default function EventsScreen() {
             multiline
             numberOfLines={4}
           />
-        </View>
+        </View> */}
 
         <View style={styles.timeRow}>
-          <View style={[styles.field, { flex: 1 }]}>
-            <ThemedText style={styles.label}>Start date/time</ThemedText>
+          <View style={[styles.field, { flex: 1 }]}> 
+            <ThemedText style={styles.label}>Event Date</ThemedText>
             <TextInput
               style={styles.input}
-              value={startDateTime}
-              onChangeText={setStartDateTime}
-              placeholder="YYYY-MM-DD HH:MM"
+              value={startDate}
+              onChangeText={setStartDate}
+              placeholder="YYYY-MM-DD"
+              autoCapitalize="none"
+              keyboardType="numeric"
             />
           </View>
-          <View style={[styles.field, { flex: 1 }]}>
-            <ThemedText style={styles.label}>End date/time</ThemedText>
+        </View>
+        <View style={styles.timeRow}>
+            <View style={[styles.field, { flex: 1 }]}> 
+            <ThemedText style={styles.label}>Start time</ThemedText>
             <TextInput
               style={styles.input}
-              value={endDateTime}
-              onChangeText={setEndDateTime}
-              placeholder="YYYY-MM-DD HH:MM"
+              value={startTime}
+              onChangeText={setStartTime}
+              placeholder="HH:MM"
+              autoCapitalize="none"
+              keyboardType="numeric"
+            />
+          </View>
+          {/* <View style={[styles.field, { flex: 1 }]}> 
+            <ThemedText style={styles.label}>End date</ThemedText>
+            <TextInput
+              style={styles.input}
+              value={endDate}
+              onChangeText={setEndDate}
+              placeholder="YYYY-MM-DD"
+              autoCapitalize="none"
+              keyboardType="numeric"
+            />
+          </View> */}
+          <View style={[styles.field, { flex: 1 }]}> 
+            <ThemedText style={styles.label}>End time</ThemedText>
+            <TextInput
+              style={styles.input}
+              value={endTime}
+              onChangeText={setEndTime}
+              placeholder="HH:MM"
+              autoCapitalize="none"
+              keyboardType="numeric"
             />
           </View>
         </View>
