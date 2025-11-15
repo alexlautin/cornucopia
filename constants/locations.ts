@@ -3,6 +3,8 @@ export interface FoodLocation {
   name: string;
   address: string;
   type: string;
+  // Preserve the raw OSM/shop/amenity tag for better filtering and icon mapping
+  rawType?: string;
   coordinate: {
     latitude: number;
     longitude: number;

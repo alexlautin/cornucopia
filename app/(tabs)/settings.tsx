@@ -23,10 +23,11 @@ export default function SettingsScreen() {
             setClearing(true);
             try {
               // Clear in-memory caches first, then persistent storage
-              clearOSMMemoryCache();
+              await clearOSMMemoryCache();
               await clearCache();
               Alert.alert('Success', 'Cache cleared! Fresh data will load next time.');
-            } catch (error) {
+            } catch (err) {
+              console.error('Error clearing cache:', err);
               Alert.alert('Error', 'Failed to clear cache. Please try again.');
             } finally {
               setClearing(false);

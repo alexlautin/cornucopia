@@ -1,6 +1,5 @@
 import { BlurView } from 'expo-blur';
 import { Tabs } from 'expo-router';
-import React from 'react';
 import { Platform } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
@@ -83,6 +82,12 @@ export default function TabLayout() {
             textAlign: 'center',
             transform: [{ translateX: -6 }],
           },
+        }}
+      />
+      <Tabs.Screen
+        name="signin"
+        options={{
+          href: null, // Hide from tab bar
         }}
       />
     </Tabs>

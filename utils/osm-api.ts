@@ -37,8 +37,8 @@ const OVERPASS_RETRY_LIMIT = 3;
 const OVERPASS_RETRY_BASE_DELAY = 5000; // 5 seconds extra wait on 429
 let lastOverpassRequestTime = 0;
 
-// Max distance (miles) to include in results
-const MAX_DISTANCE_MI = 2.5;
+// Max distance (miles) to include in results - REMOVE THIS LINE
+// const MAX_DISTANCE_MI = 2.5;
 // Overpass response types
 type OverpassElement = {
   type: 'node' | 'way' | 'relation';
@@ -260,10 +260,8 @@ export async function searchNearbyFoodLocations(
           return { place, distance };
         });
 
-        const base = resultsWithDistance.filter((item) => item.distance <= MAX_DISTANCE_MI);
-        const pool = base.length ? base : resultsWithDistance;
-
-        return pool
+        // Return all results sorted by distance, no filtering
+        return resultsWithDistance
           .sort((a, b) => a.distance - b.distance)
           .slice(0, 100)
           .map((item) => item.place);
@@ -327,16 +325,30 @@ export function formatOSMAddress(place: OSMPlace): string {
 }
 
 export function categorizePlace(place: OSMPlace): string {
+  const type = (place.type || '').toLowerCase();
   const categoryMap: Record<string, string> = {
-    'food_bank': 'Food Bank',
-    'soup_kitchen': 'Soup Kitchen',
-    'community_centre': 'Community Center',
-    'place_of_worship': 'Place of Worship',
-    'charity': 'Charity',
-    'social_facility': 'Social Facility',
+    food_bank: 'Food Bank',
+    soup_kitchen: 'Soup Kitchen',
+    community_centre: 'Community Center',
+    place_of_worship: 'Place of Worship',
+    charity: 'Charity',
+    social_facility: 'Social Facility',
+    supermarket: 'Supermarket',
+    greengrocer: 'Greengrocer',
+    convenience: 'Convenience Store',
+    bakery: 'Bakery',
+    market: 'Market',
+    marketplace: 'Market',
+    deli: 'Deli',
   };
 
-  return categoryMap[place.type] || 'Other';
+  if (categoryMap[type]) return categoryMap[type];
+
+  if (/market/.test(type)) return 'Market';
+  if (/grocery|supermarket|store/.test(type)) return 'Grocery Store';
+  if (/pantry|fridge/.test(type)) return 'Food Pantry';
+
+  return 'Other';
 }
 
 // Format an OSM opening_hours string into readable lines
