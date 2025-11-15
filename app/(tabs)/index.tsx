@@ -660,7 +660,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.5,
   },
-  scoreCard: { padding: 16, borderRadius: 14, borderWidth: 1, borderColor: '#e5e5e5', backgroundColor: 'white', marginHorizontal: 20 },
+  scoreCard: { padding: 16, borderRadius: 14, borderWidth: 1, borderColor: '#e5e5e5', backgroundColor: 'white', marginHorizontal: 20, marginTop: 16 },
   elevated: { shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 2 },
   scoreValue: { fontSize: 30, fontWeight: '700', marginVertical: 4 },
   progressBar: { height: 8, borderRadius: 6, backgroundColor: '#eef2f7', overflow: 'hidden', marginVertical: 8 },
