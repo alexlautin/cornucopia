@@ -37,6 +37,7 @@ let lastOverpassRequestTime = 0;
 
 // Max distance (miles) to include in results
 const MAX_DISTANCE_MI = 2.5;
+const EXPANDED_DISTANCE_MI = 7.5;
 
 // Overpass response types
 type OverpassElement = {
@@ -232,7 +233,7 @@ export async function searchNearbyFoodLocations(
 
       console.log(`Overpass returned: ${overpassResults.length}`);
 
-      const computeClosest = (places: OSMPlace[]) => {
+      const computeClosest = (places: OSMPlace[], maxDistance: number) => {
         const resultsWithDistance = places.map((place) => {
           const distance = getDistance(
             latitude,
@@ -391,4 +392,11 @@ export async function clearOSMMemoryCache() {
   } catch (e) {
     console.warn('OSM: Persistent cache clear failed', e);
   }
+
+  // Notify UI to clear local state immediately
+  try {
+    cacheClearListeners.forEach((cb) => {
+      try { cb(); } catch {}
+    });
+  } catch {}
 }

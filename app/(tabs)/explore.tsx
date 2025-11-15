@@ -1,6 +1,6 @@
 import * as Location from 'expo-location';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import MapView, { Callout, Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 
@@ -8,7 +8,12 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { FoodLocation, foodLocations } from '@/constants/locations';
 import { formatDistance, getDistance } from '@/utils/distance';
-import { categorizePlace, formatOSMAddress, searchNearbyFoodLocations } from '@/utils/osm-api';
+import {
+  categorizePlace,
+  formatOSMAddress,
+  onOSMCacheCleared,
+  searchNearbyFoodLocations,
+} from '@/utils/osm-api';
 
 const STALE_MS = 5 * 60 * 1000;
 
@@ -19,13 +24,12 @@ export default function TabTwoScreen() {
   const lastLoadedRef = useRef<number>(0);
   const hasLoadedRef = useRef<boolean>(false);
 
-  const loadLocations = useCallback(async () => {
-    // Only refresh if stale or never loaded
+  const loadLocations = useCallback(async (opts?: { force?: boolean }) => {
     const isStale = Date.now() - lastLoadedRef.current > STALE_MS;
-    if (hasLoadedRef.current && !isStale) return;
+    if (!opts?.force && hasLoadedRef.current && !isStale) return;
 
-    // Only show spinner when we have nothing yet
-    if (!hasLoadedRef.current && locations.length === 0) setLoading(true);
+    // When forcing or first load with empty data, show spinner
+    if ((!hasLoadedRef.current || opts?.force) && locations.length === 0) setLoading(true);
 
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -44,7 +48,9 @@ export default function TabTwoScreen() {
       // Fetch real data from OSM
       const osmPlaces = await searchNearbyFoodLocations(
         location.coords.latitude,
-        location.coords.longitude
+        location.coords.longitude,
+        undefined,
+        opts?.force ? { force: true } : undefined
       );
 
       console.log(`Found ${osmPlaces.length} OSM places`);
@@ -70,6 +76,24 @@ export default function TabTwoScreen() {
         }));
 
         setLocations(mappedLocations);
+      } else {
+        // Fall back to static list with computed distances so we always show something
+        const withDistances = foodLocations.map((loc) => ({
+          ...loc,
+          calculatedDistance: getDistance(
+            location.coords.latitude,
+            location.coords.longitude,
+            loc.coordinate.latitude,
+            loc.coordinate.longitude
+          ),
+        }));
+        const sorted = withDistances.sort((a, b) => a.calculatedDistance - b.calculatedDistance);
+        setLocations(
+          sorted.map((loc) => ({
+            ...loc,
+            distance: formatDistance(loc.calculatedDistance),
+          }))
+        );
       }
     } catch (error) {
       console.error('Error loading locations:', error);
@@ -86,6 +110,18 @@ export default function TabTwoScreen() {
       loadLocations();
     }, [loadLocations])
   );
+
+  useEffect(() => {
+    const unsubscribe = onOSMCacheCleared(() => {
+      setLocations([]);
+      setLoading(true);
+      hasLoadedRef.current = false;
+      lastLoadedRef.current = 0;
+      void loadLocations({ force: true });
+    });
+
+    return unsubscribe;
+  }, [loadLocations]);
 
   const mapRegion = userLocation || {
     latitude: 33.7676,
