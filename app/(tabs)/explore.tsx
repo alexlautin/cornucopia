@@ -50,7 +50,14 @@ export default function TabTwoScreen() {
       console.log(`Found ${osmPlaces.length} OSM places`);
 
       if (osmPlaces.length > 0) {
-        const mappedLocations: FoodLocation[] = osmPlaces.map((place, index) => ({
+        // Filter out entries without valid numeric coordinates, then map
+        const validPlaces = osmPlaces.filter((p) => {
+          const lat = parseFloat(p.lat);
+          const lon = parseFloat(p.lon);
+          return Number.isFinite(lat) && Number.isFinite(lon);
+        });
+
+        const mappedLocations: FoodLocation[] = validPlaces.map((place, index) => ({
           id: place.place_id || `osm-${index}`,
           name: place.display_name.split(',')[0],
           address: formatOSMAddress(place),
@@ -87,10 +94,11 @@ export default function TabTwoScreen() {
     }, [loadLocations])
   );
 
-  const mapRegion = userLocation || {
+  // Center map: prefer user location, otherwise center on first location so markers are visible
+  const mapRegion = userLocation || (locations.length ? locations[0].coordinate : {
     latitude: 33.7676,
     longitude: -84.3908,
-  };
+  });
 
   return (
     <View style={styles.container}>
