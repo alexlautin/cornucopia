@@ -33,6 +33,7 @@ const inflight = new Map<string, Promise<OSMPlace[]>>();
 // In-memory hours map per placeId
 const hoursMemoryCache = new Map<string, string[]>();
 
+<<<<<<< HEAD
 // Max distance (miles) to include in results
 const MAX_DISTANCE_MI = 2.5;
 
@@ -50,6 +51,24 @@ type SupabaseOSMRecord = {
     postcode?: string | null;
   } | null;
   opening_hours?: string[] | null;
+=======
+// Rate limiting: minimum delay between API calls (milliseconds)
+const MIN_REQUEST_DELAY_MS = 2000; // 2 seconds minimum between requests
+const OVERPASS_RETRY_LIMIT = 3;
+const OVERPASS_RETRY_BASE_DELAY = 5000; // 5 seconds extra wait on 429
+let lastOverpassRequestTime = 0;
+
+// Max distance (miles) to include in results - REMOVE THIS LINE
+// const MAX_DISTANCE_MI = 2.5;
+// Overpass response types
+type OverpassElement = {
+  type: 'node' | 'way' | 'relation';
+  id: number;
+  lat?: number;
+  lon?: number;
+  center?: { lat: number; lon: number };
+  tags?: Record<string, string>;
+>>>>>>> main
 };
 
 async function fetchSupabaseFoodLocations(
@@ -57,6 +76,7 @@ async function fetchSupabaseFoodLocations(
   longitude: number,
   radiusMeters: number
 ): Promise<OSMPlace[]> {
+<<<<<<< HEAD
   try {
     // Fetch a reasonable chunk of rows and sort client-side by distance.
     // Avoid filtering here so the calling screens can show all entries ordered by distance.
@@ -90,7 +110,107 @@ async function fetchSupabaseFoodLocations(
   } catch (e) {
     console.error('Supabase table fetch error:', e);
     return [];
+=======
+  // Enforce rate limiting: wait if necessary
+  const timeSinceLastRequest = Date.now() - lastOverpassRequestTime;
+  if (timeSinceLastRequest < MIN_REQUEST_DELAY_MS) {
+    const delayNeeded = MIN_REQUEST_DELAY_MS - timeSinceLastRequest;
+    console.log(`Rate limit: waiting ${delayNeeded}ms before Overpass request`);
+    await new Promise((resolve) => setTimeout(resolve, delayNeeded));
   }
+
+  // Build bounding box from center coordinates and radius
+  // Approximate: 1 degree ≈ 111 km
+  const radiusDegrees = radiusMeters / 111000;
+  const south = (latitude - radiusDegrees).toFixed(2);
+  const west = (longitude - radiusDegrees).toFixed(2);
+  const north = (latitude + radiusDegrees).toFixed(2);
+  const east = (longitude + radiusDegrees).toFixed(2);
+
+  // Bounding box format: (south, west, north, east)
+  const bbox = `(${south},${west},${north},${east})`;
+
+  const query = `[out:json];(node["shop"="supermarket"]${bbox};way["shop"="supermarket"]${bbox};node["shop"="greengrocer"]${bbox};way["shop"="greengrocer"]${bbox};node["amenity"="food_bank"]${bbox};way["amenity"="food_bank"]${bbox};node["amenity"="soup_kitchen"]${bbox};way["amenity"="soup_kitchen"]${bbox};node["shop"="bakery"]${bbox};way["shop"="bakery"]${bbox};node["shop"="convenience"]${bbox};way["shop"="convenience"]${bbox};);out body;>;out skel qt;`;
+
+  let attempt = 0;
+  while (attempt <= OVERPASS_RETRY_LIMIT) {
+    try {
+      console.log('Overpass query:', query);
+      const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+      lastOverpassRequestTime = Date.now();
+
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'FoodPantryApp/1.0 (Educational Project)',
+          Accept: 'application/json',
+        },
+      });
+
+      if (res.status === 429) {
+        attempt += 1;
+        if (attempt > OVERPASS_RETRY_LIMIT) {
+          console.error('Overpass rate limit exceeded (429) – giving up');
+          return [];
+        }
+        const wait = OVERPASS_RETRY_BASE_DELAY * attempt;
+        console.warn(`Overpass rate limit hit (429). Retrying in ${wait}ms (attempt ${attempt})`);
+        await new Promise((r) => setTimeout(r, wait));
+        continue;
+      }
+
+      if (!res.ok) {
+        console.error('Overpass API error:', res.status, res.statusText);
+        return [];
+      }
+
+      const json = await res.json();
+      const elements: OverpassElement[] = json?.elements ?? [];
+
+      const toPlace = (el: OverpassElement): OSMPlace | null => {
+        const lat = el.lat ?? el.center?.lat;
+        const lon = el.lon ?? el.center?.lon;
+        if (lat == null || lon == null) return null;
+
+        const tags = el.tags ?? {};
+        const display =
+          tags.name ||
+          tags['operator'] ||
+          tags['brand'] ||
+          `${tags.shop || tags.amenity || 'Food resource'} (${el.type}/${el.id})`;
+        const openingRaw = tags.opening_hours as string | undefined;
+        const formatted = openingRaw ? formatOpeningHoursLines(openingRaw) : undefined;
+
+        return {
+          place_id: `overpass_${el.type}_${el.id}`,
+          lat: String(lat),
+          lon: String(lon),
+          display_name: display,
+          type: tags.shop || tags.amenity || 'food_resource',
+          address: {
+            house_number: tags['addr:housenumber'],
+            road: tags['addr:street'],
+            city: tags['addr:city'] || tags['addr:town'] || tags['addr:village'],
+            state: tags['addr:state'],
+            postcode: tags['addr:postcode'],
+          },
+          openingHours: formatted,
+        };
+      };
+
+      return elements.map(toPlace).filter(Boolean) as OSMPlace[];
+    } catch (e) {
+      attempt += 1;
+      if (attempt > OVERPASS_RETRY_LIMIT) {
+        console.error('Overpass API error (giving up):', e);
+        return [];
+      }
+      const wait = OVERPASS_RETRY_BASE_DELAY * attempt;
+      console.warn(`Overpass fetch failed (${e}). Retrying in ${wait}ms`);
+      await new Promise((r) => setTimeout(r, wait));
+    }
+>>>>>>> main
+  }
+  return [];
 }
 
 function mapSupabasePlace(record: SupabaseOSMRecord): OSMPlace | null {
@@ -166,6 +286,7 @@ export async function searchNearbyFoodLocations(
   radiusMeters = 5000,
   options?: { force?: boolean }
 ): Promise<OSMPlace[]> {
+<<<<<<< HEAD
   const cacheKey = `osm_food_${latitude.toFixed(4)}_${longitude.toFixed(4)}_${radiusMeters}`;
 
   // Check Supabase cache first (unless force refresh)
@@ -180,6 +301,54 @@ export async function searchNearbyFoodLocations(
   console.log('🌐 Fetching fresh OSM data directly from Supabase table (sorted by distance)...');
   const supabaseResults = await fetchSupabaseFoodLocations(latitude, longitude, radiusMeters);
   console.log(`Supabase table returned: ${supabaseResults.length} entries (sorted)`);
+=======
+  const cacheKey = `locations_${latitude.toFixed(2)}_${longitude.toFixed(2)}`;
+  console.log(`searchNearbyFoodLocations called: ${cacheKey}, force=${opts?.force}`);
+
+  // If forcing, skip fast paths and drop in-memory entry for this key
+  if (!opts?.force) {
+    // 1) Fast path: valid in-memory cache
+    const mem = memoryCache.get(cacheKey);
+    if (mem && Date.now() - mem.ts < MEMORY_TTL_MS) {
+      console.log('Returning from memory cache');
+      // seed hours memory cache from stored places
+      mem.data.forEach((p) => {
+        if (p.openingHours?.length) hoursMemoryCache.set(p.place_id, p.openingHours);
+      });
+      return mem.data;
+    }
+
+    // 2) Fast path: persistent cache -> memory
+    console.log('Checking persistent cache...');
+    const cached = await getCachedData<OSMPlace[]>(cacheKey);
+    if (cached && cached.length) {
+      console.log(`Found ${cached.length} items in persistent cache`);
+      cached.forEach((p) => {
+        if (p.openingHours?.length) hoursMemoryCache.set(p.place_id, p.openingHours);
+      });
+      memoryCache.set(cacheKey, { data: cached, ts: Date.now() });
+      return cached;
+    }
+
+    // 3) Deduplicate concurrent fetches
+    if (inflight.has(cacheKey)) {
+      console.log('Waiting for inflight request...');
+      return inflight.get(cacheKey)!;
+    }
+  } else {
+    // Drop only in-memory entry for this key; persistent cache will be replaced after fetch
+    console.log('Force flag set, clearing memory cache');
+    memoryCache.delete(cacheKey);
+  }
+
+  console.log('Starting new fetch from Overpass...');
+  const fetchPromise = (async () => {
+    try {
+      // Use Overpass API with bounding box for food-related locations
+      const radiusMeters = radiusKm * 1000;
+      console.log(`Calling fetchOverpassFoodLocations with radius ${radiusMeters}m`);
+      const overpassResults = await fetchOverpassFoodLocations(latitude, longitude, radiusMeters);
+>>>>>>> main
 
   // The results from fetchSupabaseFoodLocations are already sorted by distance.
   const cappedResults = supabaseResults; // keep name for compatibility
@@ -187,6 +356,7 @@ export async function searchNearbyFoodLocations(
   // Hydrate opening hours from cached data and Supabase payload
   await hydrateOpeningHours(cappedResults);
 
+<<<<<<< HEAD
   // Save caches (persist + memory), including openingHours
   await setCachedData(cacheKey, cappedResults);
   memoryCache.set(cacheKey, { data: cappedResults, ts: Date.now() });
@@ -195,6 +365,41 @@ export async function searchNearbyFoodLocations(
   });
 
   return cappedResults;
+=======
+        // Return all results sorted by distance, no filtering
+        return resultsWithDistance
+          .sort((a, b) => a.distance - b.distance)
+          .slice(0, 100)
+          .map((item) => item.place);
+      };
+
+      const cappedResults = computeClosest(overpassResults);
+      console.log(`After sorting/capping: ${cappedResults.length} results`);
+
+      // Hydrate opening hours (cached, then network where needed)
+      console.log('Hydrating opening hours...');
+      await hydrateOpeningHours(cappedResults);
+      console.log('Opening hours hydrated');
+
+      // Save caches (persist + memory), including openingHours
+      console.log('Saving to cache...');
+      await setCachedData(cacheKey, cappedResults);
+      memoryCache.set(cacheKey, { data: cappedResults, ts: Date.now() });
+      cappedResults.forEach((p) => {
+        if (p.openingHours?.length) hoursMemoryCache.set(p.place_id, p.openingHours);
+      });
+      console.log('Cache saved, returning results');
+
+      return cappedResults;
+    } finally {
+      inflight.delete(cacheKey);
+      console.log('Removed from inflight');
+    }
+  })();
+
+  inflight.set(cacheKey, fetchPromise);
+  return fetchPromise;
+>>>>>>> main
 }
 
 export async function getOpeningHours(placeId: string): Promise<string[] | null> {
@@ -220,24 +425,82 @@ export function formatOSMAddress(place: OSMPlace): string {
     house_number ? `${house_number} ` : '',
     road,
     city ? `, ${city}` : '',
-    state ? `, ${state}` : '',
-    postcode ? `, ${postcode}` : '',
-  ].join('');
-}
-
-export function categorizePlace(place: OSMPlace): string {
-  const categoryMap: Record<string, string> = {
-    'food_bank': 'Food Bank',
-    'soup_kitchen': 'Soup Kitchen',
-    'community_centre': 'Community Center',
-    'place_of_worship': 'Place of Worship',
-    'charity': 'Charity',
-    'social_facility': 'Social Facility',
+    supermarket: 'Supermarket',
+    greengrocer: 'Greengrocer',
+    convenience: 'Convenience Store',
+    bakery: 'Bakery',
+    market: 'Market',
+    marketplace: 'Market',
+    deli: 'Deli',
   };
 
-  return categoryMap[place.type] || 'Other';
+  if (categoryMap[type]) return categoryMap[type];
+
+  if (/market/.test(type)) return 'Market';
+  if (/grocery|supermarket|store/.test(type)) return 'Grocery Store';
+  if (/pantry|fridge/.test(type)) return 'Food Pantry';
+
+  return 'Other';
 }
 
+<<<<<<< HEAD
+=======
+// Format an OSM opening_hours string into readable lines
+function formatOpeningHoursLines(opening: string): string[] {
+  if (!opening) return [];  
+  if (opening.trim() === '24/7') return ['Open 24/7'];
+
+  const dayMap: Record<string, string> = {
+    Mo: 'Mon', Tu: 'Tue', We: 'Wed', Th: 'Thu', Fr: 'Fri', Sa: 'Sat', Su: 'Sun',
+  };
+
+  const beautifyDays = (s: string) =>
+    s.replace(/\b(Mo|Tu|We|Th|Fr|Sa|Su)\b/g, (m) => dayMap[m] || m)
+     .replace(/\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)-(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b/g, '$1–$2');
+
+  return opening
+    .split(';')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map(beautifyDays);
+}
+
+// Fetch opening hours for Overpass id types: overpass_node_123, overpass_way_456, overpass_relation_789
+async function fetchOverpassOpeningHoursById(overpassId: string): Promise<string[] | null> {
+  try {
+    const [, type, rawId] = overpassId.split('_'); // ['overpass', 'node', '123']
+    if (!type || !rawId) return null;
+
+    const query = `[out:json][timeout:25]; ${type}(${rawId}); out tags;`;
+    const res = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'User-Agent': 'FoodPantryApp/1.0 (Educational Project)',
+        Accept: 'application/json',
+      },
+      body: `data=${encodeURIComponent(query)}`,
+    });
+
+    if (!res.ok) return null;
+    const json = await res.json();
+    const opening = json?.elements?.[0]?.tags?.opening_hours as string | undefined;
+    if (!opening) return null;
+    const lines = formatOpeningHoursLines(opening);
+    return lines.length ? lines : null;
+  } catch {
+    return null;
+  }
+}
+
+const cacheClearListeners = new Set<() => void>();
+
+export function onOSMCacheCleared(listener: () => void) {
+  cacheClearListeners.add(listener);
+  return () => cacheClearListeners.delete(listener);
+}
+
+>>>>>>> main
 // Add this export to clear all in-memory caches from this module
 export async function clearOSMMemoryCache() {
   memoryCache.clear();
@@ -261,4 +524,12 @@ export async function clearOSMMemoryCache() {
   } catch (e) {
     console.warn('OSM: Persistent cache clear failed', e);
   }
+
+  cacheClearListeners.forEach((cb) => {
+    try {
+      cb();
+    } catch {
+      // ignore individual listener failures
+    }
+  });
 }
