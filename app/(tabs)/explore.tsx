@@ -49,7 +49,7 @@ export default function TabTwoScreen() {
       const osmPlaces = await searchNearbyFoodLocations(
         location.coords.latitude,
         location.coords.longitude,
-        undefined,
+        10,
         opts?.force ? { force: true } : undefined
       );
 
@@ -123,9 +123,11 @@ export default function TabTwoScreen() {
     return unsubscribe;
   }, [loadLocations]);
 
-  const mapRegion = userLocation || {
-    latitude: 33.7676,
-    longitude: -84.3908,
+  const mapRegion = {
+    latitude: (userLocation?.latitude ?? 33.7676),
+    longitude: (userLocation?.longitude ?? -84.3908),
+    latitudeDelta: 0.15,
+    longitudeDelta: 0.15,
   };
 
   return (
@@ -133,11 +135,7 @@ export default function TabTwoScreen() {
       <MapView
         style={styles.map}
         provider={PROVIDER_DEFAULT}
-        initialRegion={{
-          ...mapRegion,
-          latitudeDelta: 0.15,
-          longitudeDelta: 0.15,
-        }}
+        region={mapRegion}
         showsUserLocation
         showsMyLocationButton
         showsCompass

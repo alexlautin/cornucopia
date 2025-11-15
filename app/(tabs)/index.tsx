@@ -41,6 +41,7 @@ export default function HomeScreen() {
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const hasInitialLoad = useRef(false);
   const isInitializing = useRef(true); // NEW: track true initialization
+  const inflightRef = useRef<Promise<void> | null>(null);
   const router = useRouter();
   const formattedLastUpdated = useMemo(() => {
     if (!lastUpdated) return "";
@@ -92,94 +93,91 @@ export default function HomeScreen() {
   };
 
   const getCurrentLocation = useCallback(async (force?: boolean) => {
+    if (inflightRef.current) {
+      return inflightRef.current;
+    }
+
     // Always show loader on initial load or forced refresh
     if (!hasInitialLoad.current || force) {
       setLoading(true);
     }
 
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        console.log("Location permission not granted");
-        setLoading(false);
-        hasInitialLoad.current = true;
-        isInitializing.current = false;
-        return;
-      }
+    const run = (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+          console.log("Location permission not granted");
+          return;
+        }
 
-      console.log("Getting current position...");
-      const locationData = await Location.getCurrentPositionAsync({});
-      console.log(
-        "Current position:",
-        locationData.coords.latitude,
-        locationData.coords.longitude
-      );
-
-      // Only fetch OSM data with larger radius
-      console.log("Fetching OSM data...");
-
-      // Add timeout protection
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error("Request timeout after 30s")), 30000);
-      });
-
-      const osmPlaces = await Promise.race([
-        searchNearbyFoodLocations(
+        console.log("Getting current position...");
+        const locationData = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        console.log(
+          "Current position:",
           locationData.coords.latitude,
-          locationData.coords.longitude,
-          10, // Increased from default 5km to 10km
-          force ? { force: true } : undefined // bypass caches on manual refresh
-        ),
-        timeoutPromise,
-      ]);
-
-      console.log(`Fetched ${osmPlaces.length} places from OSM`);
-
-      if (osmPlaces.length === 0) {
-        console.warn("No OSM places found in the area");
-        setSortedLocations([]);
-        setLastUpdated(Date.now());
-        hasInitialLoad.current = true;
-        isInitializing.current = false;
-        setLoading(false);
-        return;
-      }
-
-      const nextLocations = osmPlaces.map((place, index) => {
-        const calcDist = getDistance(
-          locationData.coords.latitude,
-          locationData.coords.longitude,
-          parseFloat(place.lat),
-          parseFloat(place.lon)
+          locationData.coords.longitude
         );
-        return {
-          id: place.place_id || `osm-${index}`,
-          name: place.display_name.split(",")[0],
-          address: formatOSMAddress(place),
-          type: categorizePlace(place),
-          coordinate: {
-            latitude: parseFloat(place.lat),
-            longitude: parseFloat(place.lon),
-          },
-          distance: formatDistance(calcDist),
-        };
-      });
 
-      console.log(`Mapped ${nextLocations.length} locations`);
-      const sorted = sortByDistance(nextLocations);
-      console.log("Setting sorted locations...");
-      setSortedLocations(sorted);
-      setLastUpdated(Date.now());
-      hasInitialLoad.current = true;
-      isInitializing.current = false;
-      console.log("Location fetch complete");
-    } catch (error) {
-      console.error("Error getting location:", error);
-      hasInitialLoad.current = true;
-      isInitializing.current = false;
-      // Don't set fallback data on error
+        console.log("Fetching OSM data...");
+        const osmPlaces = await searchNearbyFoodLocations(
+          locationData.coords.latitude,
+          locationData.coords.longitude,
+          10,
+          force ? { force: true } : undefined
+        );
+
+        console.log(`Fetched ${osmPlaces.length} places from OSM`);
+
+        if (osmPlaces.length === 0) {
+          console.warn("No OSM places found in the area");
+          setSortedLocations([]);
+          setLastUpdated(Date.now());
+          return;
+        }
+
+        const nextLocations = osmPlaces.map((place, index) => {
+          const calcDist = getDistance(
+            locationData.coords.latitude,
+            locationData.coords.longitude,
+            parseFloat(place.lat),
+            parseFloat(place.lon)
+          );
+          return {
+            id: place.place_id || `osm-${index}`,
+            name: place.display_name.split(",")[0],
+            address: formatOSMAddress(place),
+            type: categorizePlace(place),
+            coordinate: {
+              latitude: parseFloat(place.lat),
+              longitude: parseFloat(place.lon),
+            },
+            distance: formatDistance(calcDist),
+          };
+        });
+
+        console.log(`Mapped ${nextLocations.length} locations`);
+        const sorted = sortByDistance(nextLocations);
+        console.log("Setting sorted locations...");
+        setSortedLocations(sorted);
+        setLastUpdated(Date.now());
+        console.log("Location fetch complete");
+      } catch (error) {
+        console.error("Error fetching places:", error);
+        // Don't set fallback data on error
+      } finally {
+        hasInitialLoad.current = true;
+        isInitializing.current = false;
+        setLoading(false);
+      }
+    })();
+
+    inflightRef.current = run;
+    try {
+      await run;
     } finally {
-      setLoading(false);
+      inflightRef.current = null;
     }
   }, []); // Empty deps is fine - we use refs for tracking state
 

@@ -226,7 +226,7 @@ async function hydrateOpeningHours(places: OSMPlace[]): Promise<void> {
 export async function searchNearbyFoodLocations(
   latitude: number,
   longitude: number,
-  radiusKm: number = 5,
+  radiusKm: number = 10,
   opts?: { force?: boolean }
 ): Promise<OSMPlace[]> {
   const cacheKey = `locations_${latitude.toFixed(2)}_${longitude.toFixed(2)}`;
