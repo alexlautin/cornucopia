@@ -443,14 +443,19 @@ export default function HomeScreen() {
               </ScrollView>
             </View>
 
-            <ThemedView style={[styles.scoreCard, styles.elevated]}>
+            <Pressable
+              onPress={() => router.push('/Walkability')}
+              style={({ pressed }) => [styles.scoreCard, styles.elevated, pressed && { opacity: 0.95 }]}
+              accessibilityRole="button"
+            >
               <ThemedText type="subtitle">Food Walkability Score</ThemedText>
               <ThemedText type="title" style={[styles.scoreValue, { color: score.color }]}>{score.label}</ThemedText>
               <View style={styles.progressBar}>
                 <View style={[styles.progressFill, { width: `${Math.round(score.pct * 100)}%`, backgroundColor: score.color }]} />
               </View>
               <ThemedText style={styles.scoreDescription}>{score.hint}</ThemedText>
-            </ThemedView>
+              <ThemedText style={styles.scoreTapHint}>Tap to learn how this is calculated</ThemedText>
+            </Pressable>
 
             <ThemedView style={styles.sectionDivider} />
 
@@ -626,6 +631,7 @@ const styles = StyleSheet.create({
   progressBar: { height: 8, borderRadius: 6, backgroundColor: '#eef2f7', overflow: 'hidden', marginVertical: 8 },
   progressFill: { height: '100%', borderRadius: 6 },
   scoreDescription: { opacity: 0.9, fontSize: 13, lineHeight: 18, color: '#374151' },
+  scoreTapHint: { marginTop: 6, fontSize: 12, color: '#6b7280', opacity: 0.9 },
   sectionDivider: { height: 1, backgroundColor: '#f3f4f6', marginVertical: 14, marginHorizontal: 20 },
   sectionHeader: { marginTop: 10, paddingHorizontal: 20 },
   resultsMeta: { fontSize: 12, color: '#6b7280', marginBottom: 4, paddingHorizontal: 20 },
