@@ -30,6 +30,7 @@ const MAPPING = {
   'heart.fill': 'favorite',
   // mappin SF name used in some components -> material place icon
   'mappin': 'place',
+  'calendar': 'event',
 } as IconMapping;
 
 /**
