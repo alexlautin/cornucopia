@@ -502,10 +502,12 @@ export default function HomeScreen() {
                   </View>
                 </View>
 
-                <View style={styles.addrRow}>
-                  <ThemedText style={styles.addrIcon}>📍</ThemedText>
-                  <ThemedText style={styles.optionAddress} numberOfLines={1}>{item.address}</ThemedText>
-                </View>
+                {expandedId !== item.id && (
+                  <View style={styles.addrRow}>
+                    <ThemedText style={styles.addrIcon}>📍</ThemedText>
+                    <ThemedText style={styles.optionAddress} numberOfLines={1}>{item.address}</ThemedText>
+                  </View>
+                )}
 
                 {/* Inline expanded content (shows resolved address, opening hours, actions) */}
                 {expandedId === item.id && (
@@ -538,7 +540,7 @@ export default function HomeScreen() {
                             }}
                             style={styles.smallBtn}
                           >
-                            <ThemedText style={{ color: 'white', fontWeight: '600' }}>Navigate</ThemedText>
+                            <ThemedText style={{ color: 'white', fontWeight: '600' }}>Navigate →</ThemedText>
                           </Pressable>
 
                           <Pressable
