@@ -23,6 +23,9 @@ const MAPPING = {
   'gearshape.fill': 'settings',
   // added checkmark SF symbol -> material icon
   'checkmark.circle.fill': 'check-circle',
+  // Added search and close mappings to avoid using emoji characters in UI
+  'magnifyingglass': 'search',
+  'xmark': 'close',
 } as IconMapping;
 
 /**

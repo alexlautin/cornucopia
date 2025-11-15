@@ -95,11 +95,6 @@ export default function OptionDetailsScreen() {
         <View style={styles.typeLabel}>
           <ThemedText style={styles.typeLabelText}>{type}</ThemedText>
         </View>
-        {isOSMData && (
-          <View style={[styles.typeLabel, { backgroundColor: '#10b981', marginLeft: 8 }]}>
-            <ThemedText style={styles.typeLabelText}>✓ Real Data</ThemedText>
-          </View>
-        )}
       </View>
 
       <ThemedView style={styles.card}>
@@ -139,9 +134,7 @@ export default function OptionDetailsScreen() {
           About
         </ThemedText>
         <ThemedText>
-          {isOSMData 
-            ? 'This location data is sourced from OpenStreetMap, a free and open geographic database maintained by volunteers worldwide.'
-            : 'Fresh, accessible food option in your area. More detailed information and hours coming soon.'}
+          Fresh, accessible food option in your area. More detailed information and hours coming soon.
         </ThemedText>
       </ThemedView>
 
@@ -151,7 +144,6 @@ export default function OptionDetailsScreen() {
         </ThemedText>
         <ThemedText>• Type: {type}</ThemedText>
         {distance ? <ThemedText>• Distance: {distance}</ThemedText> : null}
-        {isOSMData && <ThemedText>• Data Source: OpenStreetMap</ThemedText>}
       </ThemedView>
     </ThemedView>
   );

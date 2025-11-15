@@ -7,11 +7,10 @@ import { openNavigation } from '@/utils/navigation';
 import {
   categorizePlace,
   formatOSMAddress,
-  getOpeningHours,
   searchNearbyFoodLocations,
 } from '@/utils/osm-api';
 import * as Location from 'expo-location';
-import { useRouter } from 'expo-router';
+import { useRouter, useSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
@@ -35,6 +34,7 @@ export default function HomeScreen() {
   const hasInitialLoad = useRef(false);
   const isInitializing = useRef(true);
   const router = useRouter();
+  const params = useSearchParams();
   const formattedLastUpdated = useMemo(() => {
     if (!lastUpdated) return '';
     try {
@@ -178,6 +178,38 @@ export default function HomeScreen() {
   }, [reverseGeocodeCoords]);
 
   useEffect(() => {
+    let cancelled = false;
+    // If hours were prefetched via params (JSON string), use them and skip fetch
+    if (params.hours) {
+      try {
+        const parsed = JSON.parse(String(params.hours));
+        if (!cancelled) {
+          setHours(Array.isArray(parsed) ? parsed : null);
+          setLoadingHours(false);
+        }
+        return;
+      } catch {
+        // fall through to fetching if parsing fails
+      }
+    }
+
+    async function load() {
+      if (!params.id) return;
+      setLoadingHours(true);
+      try {
+        const lines = await getOpeningHours(String(params.id));
+        if (!cancelled) setHours(lines ?? null);
+      } finally {
+        if (!cancelled) setLoadingHours(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [params.id, params.hours]);
+
+  useEffect(() => {
     if (!hasInitialLoad.current) {
       getCurrentLocation();
     }
@@ -244,62 +276,6 @@ export default function HomeScreen() {
       name: item.name,
     });
   };
-
-  // NEW: open details with prefetch (reverse geocode + opening hours)
-  const openDetailsWithPrefetch = useCallback(
-    async (item: FoodLocation) => {
-      try {
-        // Resolve address if missing or clearly placeholder
-        let address = item.address;
-        if (!address || /^\d+\.\d+,\s*-?\d+\.\d+/.test(address)) {
-          const resolved = await reverseGeocodeCoords(item.coordinate.latitude, item.coordinate.longitude);
-          address = resolved || address;
-        }
-
-        // Try to prefetch opening hours (best-effort)
-        let hours: string[] | null = null;
-        try {
-          if (item.id) {
-            const fetched = await getOpeningHours(String(item.id));
-            if (fetched && fetched.length > 0) hours = fetched;
-          }
-        } catch (e) {
-          // ignore; details page will attempt fetch if needed
-          console.warn('prefetch getOpeningHours failed', e);
-        }
-
-        router.push({
-          pathname: '/option/[id]',
-          params: {
-            id: item.id,
-            name: item.name,
-            type: item.type,
-            address: address,
-            distance: item.distance,
-            latitude: item.coordinate.latitude.toString(),
-            longitude: item.coordinate.longitude.toString(),
-            ...(hours ? { hours: JSON.stringify(hours) } : {}),
-          },
-        });
-      } catch (err) {
-        console.error('openDetailsWithPrefetch error', err);
-        // fallback: minimal push
-        router.push({
-          pathname: '/option/[id]',
-          params: {
-            id: item.id,
-            name: item.name,
-            type: item.type,
-            address: item.address,
-            distance: item.distance,
-            latitude: item.coordinate.latitude.toString(),
-            longitude: item.coordinate.longitude.toString(),
-          },
-        });
-      }
-    },
-    [reverseGeocodeCoords, router]
-  );
 
   return (
     <ThemedView style={styles.container}>
@@ -385,7 +361,20 @@ export default function HomeScreen() {
         renderItem={({ item }) => (
           <Pressable
             android_ripple={{ color: '#00000010' }}
-            onPress={() => void openDetailsWithPrefetch(item)}
+            onPress={() =>
+              router.push({
+                pathname: '/option/[id]',
+                params: {
+                  id: item.id,
+                  name: item.name,
+                  type: item.type,
+                  address: item.address,
+                  distance: item.distance,
+                  latitude: item.coordinate.latitude.toString(),
+                  longitude: item.coordinate.longitude.toString(),
+                },
+              })
+            }
             style={({ pressed }) => [styles.optionCard, styles.cardElevated, pressed && styles.cardPressed]}
           >
             <View style={styles.cardRow}>
