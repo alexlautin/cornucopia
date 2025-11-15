@@ -1,6 +1,7 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { Platform } from 'react-native';
 import 'react-native-reanimated';
 
 import { AppBackground } from '@/components/app-background';
@@ -14,7 +15,20 @@ export default function RootLayout() {
   // Force navigation theme to light
   return (
     <ThemeProvider value={DefaultTheme}>
-      <Stack>
+      <Stack
+        screenOptions={{
+          headerShown: true,
+          headerStyle: {
+            backgroundColor: '#ffffff',
+          },
+          headerTintColor: '#000000',
+          headerTitleStyle: {
+            fontWeight: '600',
+          },
+          headerShadowVisible: false,
+          contentStyle: { backgroundColor: '#ffffff' },
+        }}
+      >
         <Stack.Screen
           name="(tabs)"
           options={{
@@ -34,13 +48,27 @@ export default function RootLayout() {
               title: placeName ?? 'Location',
               headerBackTitle: '',
               headerBackTitleVisible: false,
+              presentation: 'card',
             };
           }}
         />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-        <Stack.Screen name="signin" options={{ title: 'Sign In' }} />
+        <Stack.Screen
+          name="modal"
+          options={{
+            presentation: 'modal',
+            title: 'Modal',
+            headerShown: true,
+          }}
+        />
+        <Stack.Screen
+          name="signin"
+          options={{
+            title: 'Sign In',
+            headerShown: true,
+          }}
+        />
       </Stack>
-      <StatusBar style="dark" />
+      <StatusBar style="dark" backgroundColor="#ffffff" translucent={false} />
     </ThemeProvider>
   );
 }

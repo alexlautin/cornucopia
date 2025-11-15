@@ -1,13 +1,14 @@
 import * as Location from 'expo-location';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import MapView, { Callout, Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { FoodLocation, foodLocations } from '@/constants/locations';
 import { formatDistance, getDistance } from '@/utils/distance';
+import { openNavigation } from '@/utils/navigation';
 import {
   categorizePlace,
   formatOSMAddress,
@@ -136,6 +137,15 @@ export default function TabTwoScreen() {
     longitude: -84.3908,
   });
 
+  const handleNavigateFromCallout = (location: FoodLocation) => {
+    openNavigation({
+      latitude: location.coordinate.latitude,
+      longitude: location.coordinate.longitude,
+      address: location.address,
+      name: location.name,
+    });
+  };
+
   return (
     <View style={styles.container}>
       <MapView
@@ -156,20 +166,7 @@ export default function TabTwoScreen() {
             coordinate={location.coordinate}
             pinColor="#2563eb"
           >
-            <Callout
-              onPress={() => {
-                router.push({
-                  pathname: '/option/[id]',
-                  params: {
-                    id: location.id,
-                    name: location.name,
-                    type: location.type,
-                    address: location.address,
-                    distance: location.distance,
-                  },
-                });
-              }}
-            >
+            <Callout tooltip>
               <View style={styles.calloutContainer}>
                 <ThemedText style={styles.calloutTitle}>{location.name}</ThemedText>
                 <View style={styles.calloutBadge}>
@@ -178,7 +175,35 @@ export default function TabTwoScreen() {
                 {location.distance && (
                   <ThemedText style={styles.calloutDistance}>{location.distance}</ThemedText>
                 )}
-                <ThemedText style={styles.calloutTap}>Tap for details →</ThemedText>
+                
+                <View style={styles.calloutActions}>
+                  <Pressable
+                    style={styles.calloutNavButton}
+                    onPress={() => handleNavigateFromCallout(location)}
+                  >
+                    <ThemedText style={styles.calloutNavText}>🧭 Navigate</ThemedText>
+                  </Pressable>
+                  
+                  <Pressable
+                    style={styles.calloutDetailsButton}
+                    onPress={() => {
+                      router.push({
+                        pathname: '/option/[id]',
+                        params: {
+                          id: location.id,
+                          name: location.name,
+                          type: location.type,
+                          address: location.address,
+                          distance: location.distance,
+                          latitude: location.coordinate.latitude.toString(),
+                          longitude: location.coordinate.longitude.toString(),
+                        },
+                      });
+                    }}
+                  >
+                    <ThemedText style={styles.calloutDetailsText}>Details →</ThemedText>
+                  </Pressable>
+                </View>
               </View>
             </Callout>
           </Marker>
@@ -228,15 +253,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   calloutContainer: {
-    padding: 12,
-    minWidth: 220,
-    maxWidth: 260,
-    gap: 6,
+    padding: 16,
+    minWidth: 240,
+    maxWidth: 280,
+    backgroundColor: 'white',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
   },
   calloutTitle: {
     fontWeight: '700',
     fontSize: 16,
-    marginBottom: 4,
+    marginBottom: 6,
+    color: '#1f2937',
   },
   calloutBadge: {
     backgroundColor: '#e0f2fe',
@@ -244,7 +276,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
     alignSelf: 'flex-start',
-    marginBottom: 2,
+    marginBottom: 4,
   },
   calloutBadgeText: {
     color: '#0369a1',
@@ -254,12 +286,39 @@ const styles = StyleSheet.create({
   calloutDistance: {
     fontSize: 13,
     opacity: 0.7,
-    marginTop: 2,
+    marginBottom: 12,
+    color: '#6b7280',
   },
-  calloutTap: {
+  calloutActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  calloutNavButton: {
+    flex: 1,
+    backgroundColor: '#2563eb',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  calloutNavText: {
+    color: '#ffffff',
     fontSize: 12,
-    color: '#2563eb',
-    fontWeight: '700',
-    marginTop: 6,
+    fontWeight: '600',
+  },
+  calloutDetailsButton: {
+    flex: 1,
+    backgroundColor: '#f3f4f6',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  calloutDetailsText: {
+    color: '#374151',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

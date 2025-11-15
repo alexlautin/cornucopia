@@ -1,11 +1,12 @@
 import { useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, Pressable, Linking } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { setForcedColorScheme } from '@/hooks/use-theme-color';
 import { getOpeningHours } from '@/utils/osm-api';
+import { openNavigation, showNavigationOptions } from '@/utils/navigation';
 
 export default function OptionDetailsScreen() {
   const params = useLocalSearchParams<{
@@ -14,12 +15,16 @@ export default function OptionDetailsScreen() {
     type?: string;
     address?: string;
     distance?: string;
+    latitude?: string;
+    longitude?: string;
   }>();
 
   const name = params.name ?? 'Location';
   const type = params.type ?? '—';
   const address = params.address ?? 'Address not available';
   const distance = params.distance;
+  const latitude = params.latitude ? parseFloat(params.latitude) : undefined;
+  const longitude = params.longitude ? parseFloat(params.longitude) : undefined;
   const isOSMData = params.id?.startsWith('osm-') || (params.id && params.id.length > 10);
 
   // Declare state hooks first (stable order)
@@ -50,6 +55,30 @@ export default function OptionDetailsScreen() {
     };
   }, [params.id]);
 
+  const handleQuickNavigation = () => {
+    if (latitude && longitude) {
+      openNavigation({
+        latitude,
+        longitude,
+        address,
+        name,
+      });
+    }
+  };
+
+  const handleNavigationOptions = () => {
+    if (latitude && longitude) {
+      showNavigationOptions({
+        latitude,
+        longitude,
+        address,
+        name,
+      });
+    }
+  };
+
+  const canNavigate = latitude !== undefined && longitude !== undefined;
+
   return (
     <ThemedView style={styles.container}>
       <ThemedText type="title" style={styles.title}>
@@ -78,6 +107,14 @@ export default function OptionDetailsScreen() {
           Address
         </ThemedText>
         <ThemedText>{address}</ThemedText>
+        {canNavigate && (
+          <Pressable
+            style={styles.addressNavButton}
+            onPress={handleQuickNavigation}
+          >
+            <ThemedText style={styles.addressNavText}>Navigate →</ThemedText>
+          </Pressable>
+        )}
       </ThemedView>
 
       <ThemedView style={styles.card}>
@@ -158,5 +195,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e5e5e5',
     gap: 6,
+  },
+  addressNavButton: {
+    alignSelf: 'flex-start',
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#eff6ff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+  },
+  addressNavText: {
+    color: '#2563eb',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

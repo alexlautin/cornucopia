@@ -2,6 +2,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { FoodLocation } from '@/constants/locations';
 import { formatDistance, getDistance } from '@/utils/distance';
+import { openNavigation } from '@/utils/navigation';
 import {
   categorizePlace,
   formatOSMAddress,
@@ -198,6 +199,16 @@ export default function HomeScreen() {
     return { label, pct, color, hint };
   }, [nearestMi]);
 
+  const handleQuickNavigation = (item: FoodLocation, event: any) => {
+    event.stopPropagation();
+    openNavigation({
+      latitude: item.coordinate.latitude,
+      longitude: item.coordinate.longitude,
+      address: item.address,
+      name: item.name,
+    });
+  };
+
   return (
     <ThemedView style={styles.container}>
       <FlatList
@@ -288,6 +299,8 @@ export default function HomeScreen() {
                   type: item.type,
                   address: item.address,
                   distance: item.distance,
+                  latitude: item.coordinate.latitude.toString(),
+                  longitude: item.coordinate.longitude.toString(),
                 },
               })
             }
@@ -330,6 +343,8 @@ export default function HomeScreen() {
                       type: item.type,
                       address: item.address,
                       distance: item.distance,
+                      latitude: item.coordinate.latitude.toString(),
+                      longitude: item.coordinate.longitude.toString(),
                     },
                   })
                 }
@@ -389,7 +404,15 @@ const styles = StyleSheet.create({
   addrRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
   addrIcon: { fontSize: 12, marginRight: 6, opacity: 0.7 },
   optionAddress: { flex: 1 },
-  chevronButton: { marginLeft: 8, paddingHorizontal: 6, paddingVertical: 6 },
-  chevron: { color: '#9ca3af', fontWeight: '700', fontSize: 18, lineHeight: 18 },
+  chevronButton: {
+    marginLeft: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+  },
+  chevron: {
+    color: '#9ca3af',
+    fontWeight: '700',
+    fontSize: 18,
+    lineHeight: 18 },
   resetBtn: { backgroundColor: '#1a73e8', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999 },
 });

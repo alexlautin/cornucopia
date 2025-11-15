@@ -24,7 +24,11 @@ export default function SignInScreen() {
   };
 
   return (
-    <KeyboardAvoidingView behavior={Platform.select({ ios: 'padding', default: undefined })} style={{ flex: 1 }}>
+    <KeyboardAvoidingView 
+      behavior={Platform.select({ ios: 'padding', default: 'height' })} 
+      style={{ flex: 1 }}
+      keyboardVerticalOffset={Platform.select({ ios: 0, android: 0 })}
+    >
       <ThemedView style={styles.container}>
         <ThemedText type="title" style={styles.title}>Welcome back</ThemedText>
         <ThemedText style={styles.subtitle}>Sign in to continue</ThemedText>
@@ -78,6 +82,7 @@ const styles = StyleSheet.create({
     padding: 20,
     gap: 16,
     justifyContent: 'center',
+    backgroundColor: '#ffffff',
   },
   title: {
     textAlign: 'center',
