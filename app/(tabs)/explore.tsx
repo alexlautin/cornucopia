@@ -1,19 +1,18 @@
 import * as Location from 'expo-location';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import MapView, { Callout, Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { FoodLocation, foodLocations } from '@/constants/locations';
 import { formatDistance, getDistance } from '@/utils/distance';
-import { openNavigation } from '@/utils/navigation';
 import {
-    categorizePlace,
-    formatOSMAddress,
-    onOSMCacheCleared,
-    searchNearbyFoodLocations,
+  categorizePlace,
+  formatOSMAddress,
+  onOSMCacheCleared,
+  searchNearbyFoodLocations,
 } from '@/utils/osm-api';
 
 const STALE_MS = 5 * 60 * 1000;
@@ -137,15 +136,6 @@ export default function TabTwoScreen() {
     longitude: -84.3908,
   });
 
-  const handleNavigateFromCallout = (location: FoodLocation) => {
-    openNavigation({
-      latitude: location.coordinate.latitude,
-      longitude: location.coordinate.longitude,
-      address: location.address,
-      name: location.name,
-    });
-  };
-
   return (
     <View style={styles.container}>
       <MapView
@@ -166,7 +156,22 @@ export default function TabTwoScreen() {
             coordinate={location.coordinate}
             pinColor="#2563eb"
           >
-            <Callout tooltip>
+            <Callout
+              onPress={() => {
+                router.push({
+                  pathname: '/option/[id]',
+                  params: {
+                    id: location.id,
+                    name: location.name,
+                    type: location.type,
+                    address: location.address,
+                    distance: location.distance,
+                    latitude: location.coordinate.latitude.toString(),
+                    longitude: location.coordinate.longitude.toString(),
+                  },
+                });
+              }}
+            >
               <View style={styles.calloutContainer}>
                 <ThemedText style={styles.calloutTitle}>{location.name}</ThemedText>
                 <View style={styles.calloutBadge}>
@@ -176,33 +181,8 @@ export default function TabTwoScreen() {
                   <ThemedText style={styles.calloutDistance}>{location.distance}</ThemedText>
                 )}
                 
-                <View style={styles.calloutActions}>
-                  <Pressable
-                    style={styles.calloutNavButton}
-                    onPress={() => handleNavigateFromCallout(location)}
-                  >
-                    <ThemedText style={styles.calloutNavText}>🧭 Navigate</ThemedText>
-                  </Pressable>
-                  
-                  <Pressable
-                    style={styles.calloutDetailsButton}
-                    onPress={() => {
-                      router.push({
-                        pathname: '/option/[id]',
-                        params: {
-                          id: location.id,
-                          name: location.name,
-                          type: location.type,
-                          address: location.address,
-                          distance: location.distance,
-                          latitude: location.coordinate.latitude.toString(),
-                          longitude: location.coordinate.longitude.toString(),
-                        },
-                      });
-                    }}
-                  >
-                    <ThemedText style={styles.calloutDetailsText}>Details →</ThemedText>
-                  </Pressable>
+                <View style={styles.calloutDetailsButton}>
+                  <ThemedText style={styles.calloutDetailsText}>Tap for Details →</ThemedText>
                 </View>
               </View>
             </Callout>
@@ -256,13 +236,13 @@ const styles = StyleSheet.create({
     padding: 16,
     minWidth: 240,
     maxWidth: 280,
-    backgroundColor: 'white',
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    backgroundColor: 'transparent',
+    borderRadius: 0,
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
   },
   calloutTitle: {
     fontWeight: '700',
@@ -289,35 +269,16 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     color: '#6b7280',
   },
-  calloutActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  calloutNavButton: {
-    flex: 1,
-    backgroundColor: '#2563eb',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  calloutNavText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '600',
-  },
   calloutDetailsButton: {
-    flex: 1,
-    backgroundColor: '#f3f4f6',
-    paddingVertical: 8,
+    backgroundColor: '#2563eb',
+    paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 8,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
+    marginTop: 8,
   },
   calloutDetailsText: {
-    color: '#374151',
+    color: '#ffffff',
     fontSize: 12,
     fontWeight: '600',
   },
