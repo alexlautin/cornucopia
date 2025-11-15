@@ -1,9 +1,10 @@
 import { useLocalSearchParams } from 'expo-router';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { setForcedColorScheme } from '@/hooks/use-theme-color';
 import { getOpeningHours } from '@/utils/osm-api';
 
 export default function OptionDetailsScreen() {
@@ -14,6 +15,12 @@ export default function OptionDetailsScreen() {
     address?: string;
     distance?: string;
   }>();
+
+  // Force light mode while this description/details page is active and mounted
+  useEffect(() => {
+    setForcedColorScheme('light');
+    return () => setForcedColorScheme(undefined);
+  }, []);
 
   const name = params.name ?? 'Location';
   const type = params.type ?? '—';

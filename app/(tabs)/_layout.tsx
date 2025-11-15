@@ -7,12 +7,11 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-
+  // Use light colors for tabs
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
+        tabBarActiveTintColor: Colors.light.tint,
         headerShown: false,
         tabBarButton: HapticTab,
       }}>
@@ -28,6 +27,13 @@ export default function TabLayout() {
         options={{
           title: 'Map',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="map.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="eligibility"
+        options={{
+          title: 'Eligibility',
+          tabBarIcon: ({ color }) => <IconSymbol size={26} name="checkmark.circle.fill" color={color} />,
         }}
       />
       <Tabs.Screen

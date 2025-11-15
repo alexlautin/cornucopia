@@ -1,11 +1,12 @@
 // Fallback for using MaterialIcons on Android and web.
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { SymbolViewProps, SymbolWeight } from 'expo-symbols';
+import { SymbolWeight } from 'expo-symbols';
 import { ComponentProps } from 'react';
 import { OpaqueColorValue, type StyleProp, type TextStyle } from 'react-native';
 
-type IconMapping = Record<SymbolViewProps['name'], ComponentProps<typeof MaterialIcons>['name']>;
+// allow arbitrary SF-name keys in the mapping so we can add icons easily
+type IconMapping = Record<string, ComponentProps<typeof MaterialIcons>['name']>;
 type IconSymbolName = keyof typeof MAPPING;
 
 /**
@@ -20,6 +21,8 @@ const MAPPING = {
   'chevron.right': 'chevron-right',
   'map.fill': 'map',
   'gearshape.fill': 'settings',
+  // added checkmark SF symbol -> material icon
+  'checkmark.circle.fill': 'check-circle',
 } as IconMapping;
 
 /**

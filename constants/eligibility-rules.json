@@ -1,0 +1,28 @@
+{
+  "programs": [
+    {
+      "id": "snap",
+      "name": "SNAP",
+      "income_per_person_monthly_max": 1400,
+      "children_under5_bonus": 150,
+      "description": "Supplemental Nutrition Assistance Program helps with monthly grocery budget.",
+      "link": "https://www.fns.usda.gov/snap/apply"
+    },
+    {
+      "id": "wic",
+      "name": "WIC",
+      "income_per_person_monthly_max": 1550,
+      "children_under5_bonus": 250,
+      "description": "Women, Infants, and Children program; nutrition for young children.",
+      "link": "https://www.fns.usda.gov/wic"
+    },
+    {
+      "id": "school_meals",
+      "name": "School Meals",
+      "income_per_person_monthly_max": 1800,
+      "children_under5_bonus": 0,
+      "description": "Free / reduced breakfast and lunch at participating schools.",
+      "link": "https://www.fns.usda.gov/cnp"
+    }
+  ]
+}

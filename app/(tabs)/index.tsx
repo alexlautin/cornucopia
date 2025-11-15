@@ -1,6 +1,7 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { FoodLocation, foodLocations } from '@/constants/locations';
+import { setForcedColorScheme } from '@/hooks/use-theme-color';
 import { formatDistance, getDistance } from '@/utils/distance';
 import { categorizePlace, formatOSMAddress, searchNearbyFoodLocations } from '@/utils/osm-api';
 import * as Location from 'expo-location';
@@ -88,6 +89,12 @@ export default function HomeScreen() {
     getCurrentLocation();
   }, [getCurrentLocation]);
 
+  // Force light theme while Home is mounted, then restore default on unmount
+  useEffect(() => {
+    setForcedColorScheme('light');
+    return () => setForcedColorScheme(undefined);
+  }, []);
+
   // Pull-to-refresh: stop spinner quickly; let fetch continue in background
   const onRefresh = useCallback(() => {
     if (refreshing) return;
@@ -104,6 +111,10 @@ export default function HomeScreen() {
     void getCurrentLocation(true);
   }, [getCurrentLocation]);
 
+  const foodAccessScore = 0.25; // 0–1 scale; 0.25 = LOW
+  const foodAccessLabel = 'LOW';
+  const foodAccessDescription = 'Few fresh food options within walking distance.';
+
   return (
     <ThemedView style={styles.container}>
       {/* HEADER */}
@@ -116,12 +127,30 @@ export default function HomeScreen() {
 
       {/* FOOD ACCESS SCORE CARD */}
       <ThemedView style={styles.scoreCard}>
-        <ThemedText type="subtitle">Food Access Score</ThemedText>
-        <ThemedText type="title" style={styles.scoreValue}>LOW</ThemedText>
+        <ThemedView style={styles.scoreHeaderRow}>
+          <ThemedText type="subtitle">Food Walkability Score</ThemedText>
+          <ThemedText style={styles.scorePill}>{foodAccessLabel}</ThemedText>
+        </ThemedView>
+
+        <ThemedView style={styles.scoreBarContainer}>
+          <ThemedView style={styles.scoreBarTrack}>
+            <ThemedView
+              style={[
+                styles.scoreBarFill,
+                { width: `${foodAccessScore * 100}%` },
+              ]}
+            />
+          </ThemedView>
+          <ThemedText style={styles.scoreNumeric}>
+            {Math.round(foodAccessScore * 100)}/100
+          </ThemedText>
+        </ThemedView>
+
         <ThemedText style={styles.scoreDescription}>
-          Few fresh food options within walking distance.
+          {foodAccessDescription}
         </ThemedText>
       </ThemedView>
+      <ThemedView style={styles.sectionDivider} />
 
       {/* NEARBY OPTIONS LIST */}
       <ThemedText type="subtitle" style={styles.sectionHeader}>
@@ -144,6 +173,7 @@ export default function HomeScreen() {
           onEndReachedThreshold={0.2}
           renderItem={({ item }) => (
             <Pressable
+              style={({ pressed }) => [styles.optionCard, pressed && { opacity: 0.92 }]}
               onPress={() =>
                 router.push({
                   pathname: '/option/[id]',
@@ -157,33 +187,36 @@ export default function HomeScreen() {
                 })
               }
             >
-              <ThemedView style={styles.optionCard}>
-                <ThemedText style={styles.optionDistance}>{item.distance}</ThemedText>
-                <ThemedView style={styles.optionRow}>
-                  <ThemedView style={{ flexDirection: 'column', flex: 1 }}>
-                    <ThemedText type="defaultSemiBold">{item.name}</ThemedText>
-                    <ThemedText style={styles.optionType}>{item.type}</ThemedText>
-                    <ThemedText style={styles.optionAddress}>{item.address}</ThemedText>
-                  </ThemedView>
-                  <Pressable
-                    style={styles.directionsButton}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      router.push({
-                        pathname: '/option/[id]',
-                        params: {
-                          id: item.id,
-                          name: item.name,
-                          type: item.type,
-                          address: item.address,
-                          distance: item.distance,
-                        },
-                      });
-                    }}
-                  >
-                    <ThemedText style={styles.directionsText}>➤</ThemedText>
-                  </Pressable>
+              <ThemedView style={styles.optionHeaderRow}>
+                <ThemedView style={{ flex: 1 }}>
+                  <ThemedText style={styles.optionName}>{item.name}</ThemedText>
+                  <ThemedText style={styles.optionAddress}>{item.address}</ThemedText>
                 </ThemedView>
+                <ThemedView style={styles.distanceBadge}>
+                  <ThemedText style={styles.distanceBadgeText}>{item.distance}</ThemedText>
+                </ThemedView>
+              </ThemedView>
+              <ThemedView style={styles.optionFooterRow}>
+                <ThemedText style={styles.optionTypeTag}>{item.type}</ThemedText>
+                <Pressable
+                  style={styles.directionsButton}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    router.push({
+                      pathname: '/option/[id]',
+                      params: {
+                        id: item.id,
+                        name: item.name,
+                        type: item.type,
+                        address: item.address,
+                        distance: item.distance,
+                      },
+                    });
+                  }}
+                  hitSlop={8}
+                >
+                  <ThemedText style={styles.directionsText}>➤</ThemedText>
+                </Pressable>
               </ThemedView>
             </Pressable>
           )}
@@ -199,20 +232,28 @@ const styles = StyleSheet.create({
     padding: 20,
     gap: 12,
     paddingTop: 60,
+    backgroundColor: '#ffffff', // changed from dark slate background to white
+    paddingBottom: 20,
   },
   header: {
-    marginTop: 10,
-    fontSize: 32,
+    marginTop: 4,
+    fontSize: 34,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   subtitle: {
-    marginBottom: 10,
+    marginBottom: 16,
     opacity: 0.7,
+    fontSize: 15,
   },
   scoreCard: {
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#e5e5e5',
+    borderColor: '#e5e7eb',
+    backgroundColor: '#ffffff',
+    marginTop: 4,
+    gap: 10,
   },
   scoreValue: {
     color: '#b91c1c',
@@ -221,47 +262,144 @@ const styles = StyleSheet.create({
     marginVertical: 4,
   },
   scoreDescription: {
-    opacity: 0.8,
+    opacity: 0.9,
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#374151',
   },
-  sectionHeader: {
-    marginTop: 16,
+  scoreHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  optionCard: {
-    padding: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#e5e5e5',
-    marginVertical: 6,
-  },
-  optionType: {
-    opacity: 0.7,
-    marginTop: 2,
-  },
-  optionAddress: {
-    opacity: 0.6,
+  scorePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
     fontSize: 12,
-    marginTop: 4,
+    fontWeight: '700',
+    backgroundColor: '#fee2e2',
+    color: '#b91c1c',
+    overflow: 'hidden',
   },
-  optionDistance: {
-    opacity: 0.6,
+  scoreBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
     marginBottom: 2,
   },
-  optionRow: {
+  scoreBarTrack: {
+    flex: 1,
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: '#e5e7eb',
+    overflow: 'hidden',
+  },
+  scoreBarFill: {
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: '#fb923c',
+  },
+  scoreNumeric: {
+    fontSize: 11,
+    color: '#374151',
+    opacity: 0.9,
+    width: 50,
+    textAlign: 'right',
+  },
+  sectionHeader: {
+    marginTop: 4,
+    marginBottom: 6,
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  sectionDivider: {
+    height: 1,
+    backgroundColor: '#f3f4f6',
+    marginVertical: 14,
+  },
+  optionCard: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginVertical: 6,
+    backgroundColor: '#ffffff',
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
+    gap: 10,
+  },
+  optionHeaderRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'flex-start',
+    gap: 10,
+  },
+  optionName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1f2937',
+    marginBottom: 2,
+  },
+  optionAddress: {
+    color: '#64748b',
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  distanceBadge: {
+    backgroundColor: '#f1f5f9',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  distanceBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#0f172a',
+    letterSpacing: 0.3,
+  },
+  optionFooterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  optionTypeTag: {
+    backgroundColor: '#ecfdf5',
+    color: '#047857',
+    fontSize: 10,
+    fontWeight: '700',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
   },
   directionsButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    backgroundColor: '#1a73e8',
-    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: '#059669',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 2,
+    elevation: 2,
   },
   directionsText: {
-    color: 'white',
+    color: '#ffffff',
     fontWeight: '600',
+    fontSize: 12,
+    letterSpacing: 0.5,
   },
   loadingContainer: {
     padding: 40,

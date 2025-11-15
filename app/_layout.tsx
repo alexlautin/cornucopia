@@ -10,10 +10,9 @@ export const unstable_settings = {
 };
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
-
+  // Force navigation theme to light
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={DefaultTheme}>
       <Stack>
         <Stack.Screen
           name="(tabs)"
@@ -40,7 +39,7 @@ export default function RootLayout() {
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         <Stack.Screen name="signin" options={{ title: 'Sign In' }} />
       </Stack>
-      <StatusBar style="auto" />
+      <StatusBar style="dark" />
     </ThemeProvider>
   );
 }

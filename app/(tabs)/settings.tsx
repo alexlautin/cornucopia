@@ -2,11 +2,15 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { clearCache } from '@/utils/cache';
 import { clearOSMMemoryCache } from '@/utils/osm-api';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { setForcedColorScheme } from '@/hooks/use-theme-color';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet } from 'react-native';
 
 export default function SettingsScreen() {
   const [clearing, setClearing] = useState(false);
+  const systemScheme = useColorScheme() ?? 'light';
+  const [appearance, setAppearance] = useState<'system' | 'light' | 'dark'>('system');
 
   const handleRefreshData = async () => {
     Alert.alert(
@@ -37,11 +41,51 @@ export default function SettingsScreen() {
     );
   };
 
+  const applyAppearance = (mode: 'system' | 'light' | 'dark') => {
+    setAppearance(mode);
+    if (mode === 'system') setForcedColorScheme(undefined);
+    else setForcedColorScheme(mode);
+  };
+
   return (
     <ThemedView style={styles.container}>
       <ThemedText type="title" style={styles.header}>
         Settings
       </ThemedText>
+
+      {/* Appearance */}
+      <ThemedView style={styles.section}>
+        <ThemedText type="subtitle" style={styles.sectionTitle}>
+          Appearance
+        </ThemedText>
+        <ThemedText style={styles.infoText}>System: {systemScheme}</ThemedText>
+        <ThemedView style={styles.appearanceRow}>
+          <Pressable
+            onPress={() => applyAppearance('system')}
+            style={[styles.appearanceBtn, appearance === 'system' && styles.appearanceBtnActive]}
+          >
+            <ThemedText style={[styles.appearanceText, appearance === 'system' && styles.appearanceTextActive]}>
+              System
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            onPress={() => applyAppearance('light')}
+            style={[styles.appearanceBtn, appearance === 'light' && styles.appearanceBtnActive]}
+          >
+            <ThemedText style={[styles.appearanceText, appearance === 'light' && styles.appearanceTextActive]}>
+              Light
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            onPress={() => applyAppearance('dark')}
+            style={[styles.appearanceBtn, appearance === 'dark' && styles.appearanceBtnActive]}
+          >
+            <ThemedText style={[styles.appearanceText, appearance === 'dark' && styles.appearanceTextActive]}>
+              Dark
+            </ThemedText>
+          </Pressable>
+        </ThemedView>
+      </ThemedView>
 
       <ThemedView style={styles.section}>
         <ThemedText type="subtitle" style={styles.sectionTitle}>
@@ -107,6 +151,31 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     marginBottom: 16,
+  },
+  appearanceRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  appearanceBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: 'transparent',
+  },
+  appearanceBtnActive: {
+    backgroundColor: '#2563eb',
+    borderColor: '#2563eb',
+  },
+  appearanceText: {
+    color: '#374151',
+    fontWeight: '600',
+  },
+  appearanceTextActive: {
+    color: '#ffffff',
   },
   button: {
     backgroundColor: '#2563eb',
