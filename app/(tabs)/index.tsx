@@ -147,9 +147,11 @@ export default function HomeScreen() {
         .filter((m) => Number.isFinite(m.lat) || Number.isFinite(m.lon) || m.place) // keep items (defensive)
         .sort((a, b) => a.distanceNum - b.distanceNum);
 
-      // Resolve addresses for entries that lack an OSM address, in small prioritized batches.
+      // Resolve addresses for the nearest entries only (limit to avoid platform rate limits).
       const BATCH_SIZE = 6;
-      for (let i = 0; i < placesWithMeta.length; i += BATCH_SIZE) {
+      const MAX_REVERSE_GEOCODE = 15; // only reverse-geocode this many closest places
+      const toResolveCount = Math.min(placesWithMeta.length, MAX_REVERSE_GEOCODE);
+      for (let i = 0; i < toResolveCount; i += BATCH_SIZE) {
         const batch = placesWithMeta.slice(i, i + BATCH_SIZE);
         await Promise.all(
           batch.map(async (m) => {
@@ -157,7 +159,6 @@ export default function HomeScreen() {
             // If OSM already provides an address, skip reverse geocoding
             const osmAddr = formatOSMAddress(m.place);
             if (osmAddr && osmAddr.length) {
-              // mark resolved to avoid later reverse call
               (m as any).resolvedAddress = osmAddr;
               return;
             }
@@ -173,6 +174,8 @@ export default function HomeScreen() {
         // small micro-yield to avoid blocking event loop long-term
         await new Promise((r) => setTimeout(r, 0));
       }
+      // Note: items beyond MAX_REVERSE_GEOCODE will keep resolvedAddress undefined and will fall back
+      // to OSM address (if any) or coordinates when building final list.
 
       // Build final nextLocations in the same prioritized (distance) order
       const nextLocations: FoodLocation[] = placesWithMeta.map((m, index) => {

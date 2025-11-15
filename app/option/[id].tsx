@@ -120,6 +120,14 @@ export default function OptionDetailsScreen() {
 
   const canNavigate = latitude !== undefined && longitude !== undefined;
 
+  // Determine whether there is a usable human-readable address to display.
+  const hasUsableAddress = Boolean(
+    address &&
+      address !== 'Address not available' &&
+      // treat plain coordinate fallback (e.g. "33.76760, -84.39080") as not usable text
+      !/^\s*-?\d+\.\d+,\s*-?\d+\.\d+\s*$/.test(address)
+  );
+
   return (
     <ThemedView style={styles.container}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -145,14 +153,23 @@ export default function OptionDetailsScreen() {
         <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
           Address
         </ThemedText>
-        <ThemedText>{address}</ThemedText>
-        {canNavigate && (
-          <Pressable
-            style={styles.addressNavButton}
-            onPress={handleQuickNavigation}
-          >
-            <ThemedText style={styles.addressNavText}>Navigate →</ThemedText>
+        {hasUsableAddress ? (
+          <>
+            <ThemedText>{address}</ThemedText>
+            {canNavigate && (
+              <Pressable style={styles.addressNavButton} onPress={handleQuickNavigation}>
+                <ThemedText style={styles.addressNavText}>Navigate →</ThemedText>
+              </Pressable>
+            )}
+          </>
+        ) : canNavigate ? (
+          // Compact UI when address text is not available: only show a single Navigate action.
+          <Pressable style={[styles.addressNavButton, styles.addressOnlyButton]} onPress={handleQuickNavigation}>
+            <ThemedText style={[styles.addressNavText, styles.addressOnlyText]}>Navigate →</ThemedText>
           </Pressable>
+        ) : (
+          // No address and cannot navigate: show a subtle fallback message without big whitespace.
+          <ThemedText style={{ opacity: 0.7 }}>Address not available</ThemedText>
         )}
       </ThemedView>
 
@@ -246,6 +263,18 @@ const styles = StyleSheet.create({
     color: '#2563eb',
     fontSize: 14,
     fontWeight: '600',
+  },
+  // Compact variant when no address text is available (removes extra spacing/visual weight).
+  addressOnlyButton: {
+    marginTop: 0,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: '#2563eb',
+    borderColor: '#2563eb',
+  },
+  addressOnlyText: {
+    color: '#ffffff',
+    fontWeight: '700',
   },
   headerShareBtn: {
     paddingHorizontal: 10,
