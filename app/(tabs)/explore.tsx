@@ -165,28 +165,39 @@ export default function TabTwoScreen() {
           }
         }
 
-        // Compute radius from visible region if provided
-        let radiusMeters: number | undefined = undefined;
-        if (opts?.center) {
-          const latHalf = (opts.center.latitudeDelta ?? 0.05) / 2;
-          const lonHalf = (opts.center.longitudeDelta ?? 0.05) / 2;
-          const cornerLat = opts.center.latitude + latHalf;
-          const cornerLon = opts.center.longitude + lonHalf;
-          const radiusMiles = getDistance(opts.center.latitude, opts.center.longitude, cornerLat, cornerLon);
-          radiusMeters = Math.max(500, Math.round(radiusMiles * 1609.34) + 250); // min radius + buffer
-        }
+      console.log('Fetching OSM data...');
+      // Fetch real data from OSM
+      const osmPlaces = await searchNearbyFoodLocations(
+        location.coords.latitude,
+        location.coords.longitude,
+        undefined,
+        (opts?.force || !hasLoadedRef.current) ? { force: true } : undefined
+      );
 
         console.log('Fetching OSM data for center:', centerLat, centerLon, 'radiusMeters:', radiusMeters);
         const osmPlaces = await searchNearbyFoodLocations(centerLat, centerLon, radiusMeters);
 
         console.log(`Found ${osmPlaces.length} OSM places`);
 
-        if (osmPlaces.length > 0) {
-          const validPlaces = osmPlaces.filter((p) => {
-            const lat = parseFloat(p.lat);
-            const lon = parseFloat(p.lon);
-            return Number.isFinite(lat) && Number.isFinite(lon);
-          });
+        const mappedLocations: FoodLocation[] = validPlaces.map((place, index) => ({
+          id: place.place_id || `osm-${index}`,
+          name: place.display_name.split(',')[0],
+          address: formatOSMAddress(place),
+          type: categorizePlace(place),
+          coordinate: {
+            latitude: parseFloat(place.lat),
+            longitude: parseFloat(place.lon),
+          },
+          distance: formatDistance(
+            getDistance(
+              location.coords.latitude,
+              location.coords.longitude,
+              parseFloat(place.lat),
+              parseFloat(place.lon)
+            )
+          ),
+          snap: (place as any).snap ? true : false,
+        }));
 
           const mappedLocations: FoodLocation[] = validPlaces.map((place, index) => {
             const lat = parseFloat(place.lat);
@@ -334,6 +345,7 @@ export default function TabTwoScreen() {
                     distance: location.distance,
                     latitude: location.coordinate.latitude.toString(),
                     longitude: location.coordinate.longitude.toString(),
+                    snap: location.snap ? 'true' : 'false',
                   },
                 });
               }}
@@ -343,6 +355,11 @@ export default function TabTwoScreen() {
                 <View style={styles.calloutBadge}>
                   <ThemedText style={styles.calloutBadgeText}>{location.type}</ThemedText>
                 </View>
+                {location.snap ? (
+                  <View style={[styles.calloutBadge, { backgroundColor: '#e6f7eb' }]}> 
+                    <ThemedText style={[styles.calloutBadgeText, { color: '#166534' }]}>SNAP</ThemedText>
+                  </View>
+                ) : null}
                 {location.distance && (
                   <ThemedText style={styles.calloutDistance}>{location.distance}</ThemedText>
                 )}

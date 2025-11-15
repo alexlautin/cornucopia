@@ -1,11 +1,10 @@
-import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
-
+import { DefaultTheme, ThemeProvider } from "@react-navigation/native";
+import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import "react-native-reanimated";
 
 export const unstable_settings = {
-  anchor: '(tabs)',
+  anchor: "(tabs)",
 };
 
 export default function RootLayout() {
@@ -16,51 +15,45 @@ export default function RootLayout() {
         screenOptions={{
           headerShown: true,
           headerStyle: {
-            backgroundColor: '#ffffff',
+            backgroundColor: "#ffffff",
           },
-          headerTintColor: '#000000',
+          headerTintColor: "#000000",
           headerTitleStyle: {
-            fontWeight: '600',
+            fontWeight: "600",
           },
           headerShadowVisible: false,
-          contentStyle: { backgroundColor: '#ffffff' },
+          contentStyle: { backgroundColor: "#ffffff" },
         }}
       >
         <Stack.Screen
           name="(tabs)"
           options={{
             headerShown: false,
-            title: '',
+            title: "",
           }}
         />
         <Stack.Screen
           name="option/[id]"
           options={({ route }) => {
             const params = route.params as { name?: string } | undefined;
-            const rawName = typeof params?.name === 'string' ? params.name : undefined;
+            const rawName =
+              typeof params?.name === "string" ? params.name : undefined;
             const trimmedName = rawName?.trim();
             const placeName = trimmedName?.length ? trimmedName : undefined;
 
             return {
-              title: placeName ?? 'Location',
-              headerBackTitle: '',
+              title: placeName ?? "Location",
+              headerBackTitle: "",
               headerBackTitleVisible: false,
-              presentation: 'card',
+              presentation: "card",
             };
           }}
         />
         <Stack.Screen
           name="modal"
           options={{
-            presentation: 'modal',
-            title: 'Modal',
-            headerShown: true,
-          }}
-        />
-        <Stack.Screen
-          name="signin"
-          options={{
-            title: 'Sign In',
+            presentation: "modal",
+            title: "Modal",
             headerShown: true,
           }}
         />
