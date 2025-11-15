@@ -2,7 +2,7 @@ import * as Location from 'expo-location';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
-import MapView, { Callout, Marker, PROVIDER_DEFAULT } from 'react-native-maps';
+import MapView, { Callout, Marker, PROVIDER_DEFAULT, type Region } from 'react-native-maps';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -26,6 +26,10 @@ export default function TabTwoScreen() {
   const lastLoadedRef = useRef<number>(0);
   const hasLoadedRef = useRef<boolean>(false);
   const mapRef = useRef<MapView | null>(null);
+
+  // Track visible region to fetch what's in the field of view
+  const [visibleRegion, setVisibleRegion] = useState<Region | null>(null);
+  const regionDebounceRef = useRef<any>(null);
 
   // Map pin color by place type
   const pinColorMap: Record<string, string> = {
@@ -127,96 +131,102 @@ export default function TabTwoScreen() {
     };
   }, [userHasMovedMap]);
 
-  const loadLocations = useCallback(async (opts?: { force?: boolean }) => {
-    const isStale = Date.now() - lastLoadedRef.current > STALE_MS;
-    if (!opts?.force && hasLoadedRef.current && !isStale) return;
+  // Accept an optional center/region so results match the visible map area.
+  const loadLocations = useCallback(
+    async (opts?: { force?: boolean; center?: Region }) => {
+      const isStale = Date.now() - lastLoadedRef.current > STALE_MS;
+      // If caller didn't force and we've loaded recently, short-circuit.
+      if (!opts?.force && hasLoadedRef.current && !isStale && !opts?.center) return;
 
-    // When forcing or first load with empty data, show spinner
-    if ((!hasLoadedRef.current || opts?.force) && locations.length === 0) setLoading(true);
+      // show spinner for first load or when forcing and we have no data
+      if ((!hasLoadedRef.current || opts?.force) && locations.length === 0) setLoading(true);
 
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setLoading(false);
-        return;
-      }
+      try {
+        let centerLat: number;
+        let centerLon: number;
 
-      const location = await Location.getCurrentPositionAsync({});
-      // Update user location if we don't have it yet
-      if (!userLocation) {
-        setUserLocation({
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-        });
-      }
+        if (opts?.center) {
+          // Use provided center (map's visible region) instead of device location
+          centerLat = opts.center.latitude;
+          centerLon = opts.center.longitude;
+          // update userLocation so distance badges remain meaningful
+          setUserLocation({ latitude: centerLat, longitude: centerLon });
+        } else {
+          const { status } = await Location.requestForegroundPermissionsAsync();
+          if (status !== 'granted') {
+            setLoading(false);
+            return;
+          }
+          const location = await Location.getCurrentPositionAsync({});
+          centerLat = location.coords.latitude;
+          centerLon = location.coords.longitude;
+          if (!userLocation) {
+            setUserLocation({ latitude: centerLat, longitude: centerLon });
+          }
+        }
 
-      console.log('Fetching OSM data...');
-      // Fetch real data from OSM
-      const osmPlaces = await searchNearbyFoodLocations(
-        location.coords.latitude,
-        location.coords.longitude,
-        undefined,
-        opts?.force ? { force: true } : undefined
-      );
+        // Compute radius from visible region if provided
+        let radiusMeters: number | undefined = undefined;
+        if (opts?.center) {
+          const latHalf = (opts.center.latitudeDelta ?? 0.05) / 2;
+          const lonHalf = (opts.center.longitudeDelta ?? 0.05) / 2;
+          const cornerLat = opts.center.latitude + latHalf;
+          const cornerLon = opts.center.longitude + lonHalf;
+          const radiusMiles = getDistance(opts.center.latitude, opts.center.longitude, cornerLat, cornerLon);
+          radiusMeters = Math.max(500, Math.round(radiusMiles * 1609.34) + 250); // min radius + buffer
+        }
 
-      console.log(`Found ${osmPlaces.length} OSM places`);
+        console.log('Fetching OSM data for center:', centerLat, centerLon, 'radiusMeters:', radiusMeters);
+        const osmPlaces = await searchNearbyFoodLocations(centerLat, centerLon, radiusMeters);
 
-      if (osmPlaces.length > 0) {
-        // Filter out entries without valid numeric coordinates, then map
-        const validPlaces = osmPlaces.filter((p) => {
-          const lat = parseFloat(p.lat);
-          const lon = parseFloat(p.lon);
-          return Number.isFinite(lat) && Number.isFinite(lon);
-        });
+        console.log(`Found ${osmPlaces.length} OSM places`);
 
-        const mappedLocations: FoodLocation[] = validPlaces.map((place, index) => ({
-          id: place.place_id || `osm-${index}`,
-          name: place.display_name.split(',')[0],
-          address: formatOSMAddress(place),
-          type: categorizePlace(place),
-          coordinate: {
-            latitude: parseFloat(place.lat),
-            longitude: parseFloat(place.lon),
-          },
-          distance: formatDistance(
-            getDistance(
-              location.coords.latitude,
-              location.coords.longitude,
-              parseFloat(place.lat),
-              parseFloat(place.lon)
-            )
-          ),
-        }));
+        if (osmPlaces.length > 0) {
+          const validPlaces = osmPlaces.filter((p) => {
+            const lat = parseFloat(p.lat);
+            const lon = parseFloat(p.lon);
+            return Number.isFinite(lat) && Number.isFinite(lon);
+          });
 
-        setLocations(mappedLocations);
-      } else {
-        // Fall back to static list with computed distances so we always show something
-        const withDistances = foodLocations.map((loc) => ({
-          ...loc,
-          calculatedDistance: getDistance(
-            location.coords.latitude,
-            location.coords.longitude,
-            loc.coordinate.latitude,
-            loc.coordinate.longitude
-          ),
-        }));
-        const sorted = withDistances.sort((a, b) => a.calculatedDistance - b.calculatedDistance);
-        setLocations(
-          sorted.map((loc) => ({
+          const mappedLocations: FoodLocation[] = validPlaces.map((place, index) => {
+            const lat = parseFloat(place.lat);
+            const lon = parseFloat(place.lon);
+            const distMiles = getDistance(centerLat, centerLon, lat, lon);
+            return {
+              id: place.place_id || `osm-${index}`,
+              name: place.display_name.split(',')[0],
+              address: formatOSMAddress(place),
+              type: categorizePlace(place),
+              coordinate: { latitude: lat, longitude: lon },
+              distance: formatDistance(distMiles),
+            };
+          });
+
+          setLocations(mappedLocations);
+        } else {
+          // fallback: compute distances for static list relative to center
+          const withDistances = foodLocations.map((loc) => ({
             ...loc,
-            distance: formatDistance(loc.calculatedDistance),
-          }))
-        );
+            calculatedDistance: getDistance(centerLat, centerLon, loc.coordinate.latitude, loc.coordinate.longitude),
+          }));
+          const sorted = withDistances.sort((a, b) => a.calculatedDistance - b.calculatedDistance);
+          setLocations(
+            sorted.map((loc) => ({
+              ...loc,
+              distance: formatDistance(loc.calculatedDistance),
+            }))
+          );
+        }
+      } catch (error) {
+        console.error('Error loading locations:', error);
+      } finally {
+        hasLoadedRef.current = true;
+        lastLoadedRef.current = Date.now();
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('Error loading locations:', error);
-      // Fall back to static data
-    } finally {
-      hasLoadedRef.current = true;
-      lastLoadedRef.current = Date.now();
-      setLoading(false);
-    }
-  }, [locations, userLocation]);
+    },
+    [locations, userLocation]
+  );
 
   const centerOnUserLocation = useCallback(async () => {
     if (centeringLocation) return;
@@ -249,13 +259,25 @@ export default function TabTwoScreen() {
   }, [centeringLocation]);
 
   // Handle when user manually moves the map
-  const handleRegionChangeComplete = useCallback(() => {
+  const handleRegionChangeComplete = useCallback((region: Region) => {
+    // mark that user moved the map and remember visible region
     setUserHasMovedMap(true);
-  }, []);
+    setVisibleRegion(region);
+
+    // debounce calls while user is interacting
+    if (regionDebounceRef.current) {
+      clearTimeout(regionDebounceRef.current);
+    }
+    regionDebounceRef.current = setTimeout(() => {
+      // load locations for the visible region; do not force spinner but ensure fresh results
+      void loadLocations({ force: true, center: region });
+    }, 450);
+  }, [loadLocations]);
 
   useFocusEffect(
     useCallback(() => {
-      loadLocations();
+      // initial load uses device location
+      void loadLocations();
     }, [loadLocations])
   );
 
@@ -265,7 +287,8 @@ export default function TabTwoScreen() {
       setLoading(true);
       hasLoadedRef.current = false;
       lastLoadedRef.current = 0;
-      void loadLocations({ force: true });
+      // reload for current visible region if available, otherwise device location
+      void loadLocations({ force: true, center: visibleRegion ?? undefined });
     });
 
     return unsubscribe;
@@ -366,10 +389,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  // make the map fill the full container so it reaches the bottom edge
   map: {
-    flex: 1,
-    paddingBottom: 65,
+    ...StyleSheet.absoluteFillObject,
   },
+
   centerLocationButton: {
     position: 'absolute',
     bottom: 110,
