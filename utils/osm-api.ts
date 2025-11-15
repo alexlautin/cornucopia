@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { fetchNearbyPlacesFromSupabase } from "./supabase-places";
 import {
   getCachedData,
   getCachedPlaceHours,
@@ -27,6 +28,11 @@ export interface OSMPlace {
 // Simple cache to avoid re-fetching
 const cache = new Map<string, { data: OSMPlace[]; timestamp: number }>();
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const USE_SUPABASE_PLACES = (process.env.EXPO_PUBLIC_USE_SUPABASE_PLACES || '').toLowerCase() === 'true';
+const OSM_MAX_RESULTS = Math.max(
+  50,
+  parseInt(process.env.EXPO_PUBLIC_OSM_MAX_RESULTS || '100', 10) || 100
+);
 
 // In-memory "stale-while-revalidate" cache and inflight deduper
 // Increased cache duration to 30 minutes to reduce API calls
@@ -229,6 +235,19 @@ export async function searchNearbyFoodLocations(
   radiusKm: number = 10,
   opts?: { force?: boolean }
 ): Promise<OSMPlace[]> {
+  // Optional: prefer Supabase-backed places if enabled
+  if (USE_SUPABASE_PLACES) {
+    const supa = await fetchNearbyPlacesFromSupabase({
+      lat: latitude,
+      lon: longitude,
+      radiusKm,
+      limit: OSM_MAX_RESULTS,
+    });
+    if (supa && supa.length) {
+      return supa;
+    }
+    // fall through to OSM if Supabase unavailable/empty
+  }
   const cacheKey = `locations_${latitude.toFixed(2)}_${longitude.toFixed(2)}`;
   console.log(
     `searchNearbyFoodLocations called: ${cacheKey}, force=${opts?.force}`
@@ -302,7 +321,7 @@ export async function searchNearbyFoodLocations(
         // Return all results sorted by distance, no filtering
         return resultsWithDistance
           .sort((a, b) => a.distance - b.distance)
-          .slice(0, 100)
+          .slice(0, OSM_MAX_RESULTS)
           .map((item) => item.place);
       };
 
