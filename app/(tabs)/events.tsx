@@ -293,7 +293,8 @@ export default function EventsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  // push content down so the "Create Event" title is not overlapped by the app header
+  container: { flex: 1, paddingTop: 60 },
   flex: { flex: 1 },
   content: { padding: 20, gap: 16, paddingBottom: 40 },
   title: { fontSize: 24, marginBottom: 4 },
