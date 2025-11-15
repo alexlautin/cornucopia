@@ -1,26 +1,34 @@
-import * as Location from 'expo-location';
-import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
-import MapView, { Callout, Marker, PROVIDER_DEFAULT, type Region } from 'react-native-maps';
+import * as Location from "expo-location";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
+import MapView, {
+  Callout,
+  Marker,
+  PROVIDER_DEFAULT,
+  type Region,
+} from "react-native-maps";
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { FoodLocation, foodLocations } from '@/constants/locations';
-import { formatDistance, getDistance } from '@/utils/distance';
+import { ThemedText } from "@/components/themed-text";
+import { ThemedView } from "@/components/themed-view";
+import { FoodLocation, foodLocations } from "@/constants/locations";
+import { formatDistance, getDistance } from "@/utils/distance";
 import {
   categorizePlace,
   formatOSMAddress,
   onOSMCacheCleared,
   searchNearbyFoodLocations,
-} from '@/utils/osm-api';
+} from "@/utils/osm-api";
 
 const STALE_MS = 5 * 60 * 1000;
 
 export default function TabTwoScreen() {
   const [locations, setLocations] = useState<FoodLocation[]>(foodLocations);
   const [loading, setLoading] = useState(true);
-  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [userLocation, setUserLocation] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
   const [centeringLocation, setCenteringLocation] = useState(false);
   const [userHasMovedMap, setUserHasMovedMap] = useState(false);
   const lastLoadedRef = useRef<number>(0);
@@ -33,67 +41,70 @@ export default function TabTwoScreen() {
 
   // Map pin color by place type
   const pinColorMap: Record<string, string> = {
-    'Food Bank': '#b91c1c',
-    'Food Pantry': '#b91c1c',
-    'Soup Kitchen': '#f59e0b',
-    'Meal Delivery': '#16a34a',
-    'Community Center': '#7c3aed',
-    'Place of Worship': '#0ea5e9',
-    'Charity': '#fb7185',
-    'Social Facility': '#06b6d4',
-    'Supermarket': '#059669',
-    'Greengrocer': '#22c55e',
-    'Convenience Store': '#f973a0',
-    'Bakery': '#f97316',
-    'Deli': '#f97316',
-    'Market': '#f59e0b',
-    'Farmers Market': '#f59e0b',
-    'Other': '#2563eb',
+    "Food Bank": "#b91c1c",
+    "Food Pantry": "#b91c1c",
+    "Soup Kitchen": "#f59e0b",
+    "Meal Delivery": "#16a34a",
+    "Community Center": "#7c3aed",
+    "Place of Worship": "#0ea5e9",
+    Charity: "#fb7185",
+    "Social Facility": "#06b6d4",
+    Supermarket: "#059669",
+    Greengrocer: "#22c55e",
+    "Convenience Store": "#f973a0",
+    Bakery: "#f97316",
+    Deli: "#f97316",
+    Market: "#f59e0b",
+    "Farmers Market": "#f59e0b",
+    Other: "#2563eb",
   };
 
   const getPinColor = (type?: string) => {
-    if (!type) return pinColorMap['Other'];
+    if (!type) return pinColorMap["Other"];
     const key = type.trim();
-    return pinColorMap[key] ?? pinColorMap['Other'];
+    return pinColorMap[key] ?? pinColorMap["Other"];
   };
 
   // Get user location immediately on mount
   const getUserLocation = useCallback(async () => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') return;
-      
+      if (status !== "granted") return;
+
       const location = await Location.getCurrentPositionAsync({});
       const newLocation = {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
       };
-      
+
       setUserLocation(newLocation);
-      
+
       // Auto-center on user location if they haven't moved the map
       if (!userHasMovedMap && mapRef.current) {
-        mapRef.current.animateToRegion({
-          ...newLocation,
-          latitudeDelta: 0.05,
-          longitudeDelta: 0.05,
-        }, 1000);
+        mapRef.current.animateToRegion(
+          {
+            ...newLocation,
+            latitudeDelta: 0.05,
+            longitudeDelta: 0.05,
+          },
+          1000
+        );
       }
     } catch (error) {
-      console.error('Error getting user location:', error);
+      console.error("Error getting user location:", error);
     }
   }, [userHasMovedMap]);
 
   // Initialize user location on mount
   useEffect(() => {
     getUserLocation();
-    
+
     // Set up location watching
     const watchLocation = async () => {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') return;
-        
+        if (status !== "granted") return;
+
         return await Location.watchPositionAsync(
           {
             accuracy: Location.Accuracy.Balanced,
@@ -105,27 +116,30 @@ export default function TabTwoScreen() {
               latitude: location.coords.latitude,
               longitude: location.coords.longitude,
             };
-            
+
             setUserLocation(newLocation);
-            
+
             // Auto-center on user location if they haven't moved the map
             if (!userHasMovedMap && mapRef.current) {
-              mapRef.current.animateToRegion({
-                ...newLocation,
-                latitudeDelta: 0.05,
-                longitudeDelta: 0.05,
-              }, 1000);
+              mapRef.current.animateToRegion(
+                {
+                  ...newLocation,
+                  latitudeDelta: 0.05,
+                  longitudeDelta: 0.05,
+                },
+                1000
+              );
             }
           }
         );
       } catch (error) {
-        console.error('Error watching location:', error);
+        console.error("Error watching location:", error);
       }
     };
-    
+
     let subscription: Location.LocationSubscription | undefined;
-    watchLocation().then(sub => subscription = sub);
-    
+    watchLocation().then((sub) => (subscription = sub));
+
     return () => {
       subscription?.remove();
     };
@@ -136,10 +150,12 @@ export default function TabTwoScreen() {
     async (opts?: { force?: boolean; center?: Region }) => {
       const isStale = Date.now() - lastLoadedRef.current > STALE_MS;
       // If caller didn't force and we've loaded recently, short-circuit.
-      if (!opts?.force && hasLoadedRef.current && !isStale && !opts?.center) return;
+      if (!opts?.force && hasLoadedRef.current && !isStale && !opts?.center)
+        return;
 
       // show spinner for first load or when forcing and we have no data
-      if ((!hasLoadedRef.current || opts?.force) && locations.length === 0) setLoading(true);
+      if ((!hasLoadedRef.current || opts?.force) && locations.length === 0)
+        setLoading(true);
 
       try {
         let centerLat: number;
@@ -153,7 +169,7 @@ export default function TabTwoScreen() {
           setUserLocation({ latitude: centerLat, longitude: centerLon });
         } else {
           const { status } = await Location.requestForegroundPermissionsAsync();
-          if (status !== 'granted') {
+          if (status !== "granted") {
             setLoading(false);
             return;
           }
@@ -165,40 +181,49 @@ export default function TabTwoScreen() {
           }
         }
 
-        console.log('Fetching OSM data for center:', centerLat, centerLon);
+        console.log("Fetching OSM data for center:", centerLat, centerLon);
         // Fetch real data from OSM
         const osmPlaces = await searchNearbyFoodLocations(
           centerLat,
           centerLon,
           undefined,
-          (opts?.force || !hasLoadedRef.current) ? { force: true } : undefined
+          opts?.force || !hasLoadedRef.current ? { force: true } : undefined
         );
 
         console.log(`Found ${osmPlaces.length} OSM places`);
 
         if (osmPlaces && osmPlaces.length > 0) {
-          const mappedLocations: FoodLocation[] = osmPlaces.map((place, index) => {
-            const lat = parseFloat(place.lat ?? '0');
-            const lon = parseFloat(place.lon ?? '0');
-            const distMiles = getDistance(centerLat, centerLon, lat, lon);
-            return {
-              id: place.place_id || `osm-${index}`,
-              name: place.display_name.split(',')[0],
-              address: formatOSMAddress(place),
-              type: categorizePlace(place),
-              coordinate: { latitude: lat, longitude: lon },
-              distance: formatDistance(distMiles),
-            };
-          });
+          const mappedLocations: FoodLocation[] = osmPlaces.map(
+            (place, index) => {
+              const lat = parseFloat(place.lat ?? "0");
+              const lon = parseFloat(place.lon ?? "0");
+              const distMiles = getDistance(centerLat, centerLon, lat, lon);
+              return {
+                id: place.place_id || `osm-${index}`,
+                name: place.display_name.split(",")[0],
+                address: formatOSMAddress(place),
+                type: categorizePlace(place),
+                coordinate: { latitude: lat, longitude: lon },
+                distance: formatDistance(distMiles),
+              };
+            }
+          );
 
           setLocations(mappedLocations);
         } else {
           // fallback: compute distances for static list relative to center
           const withDistances = foodLocations.map((loc) => ({
             ...loc,
-            calculatedDistance: getDistance(centerLat, centerLon, loc.coordinate.latitude, loc.coordinate.longitude),
+            calculatedDistance: getDistance(
+              centerLat,
+              centerLon,
+              loc.coordinate.latitude,
+              loc.coordinate.longitude
+            ),
           }));
-          const sorted = withDistances.sort((a, b) => a.calculatedDistance - b.calculatedDistance);
+          const sorted = withDistances.sort(
+            (a, b) => a.calculatedDistance - b.calculatedDistance
+          );
           setLocations(
             sorted.map((loc) => ({
               ...loc,
@@ -207,7 +232,7 @@ export default function TabTwoScreen() {
           );
         }
       } catch (error) {
-        console.error('Error loading locations:', error);
+        console.error("Error loading locations:", error);
       } finally {
         hasLoadedRef.current = true;
         lastLoadedRef.current = Date.now();
@@ -223,7 +248,7 @@ export default function TabTwoScreen() {
     setUserHasMovedMap(false); // Reset the flag when manually centering
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
+      if (status !== "granted") {
         setCenteringLocation(false);
         return;
       }
@@ -234,34 +259,40 @@ export default function TabTwoScreen() {
       };
       setUserLocation(newLocation);
       if (mapRef.current) {
-        mapRef.current.animateToRegion({
-          ...newLocation,
-          latitudeDelta: 0.05,
-          longitudeDelta: 0.05,
-        }, 800);
+        mapRef.current.animateToRegion(
+          {
+            ...newLocation,
+            latitudeDelta: 0.05,
+            longitudeDelta: 0.05,
+          },
+          800
+        );
       }
     } catch (e) {
-      console.error('Error centering on location:', e);
+      console.error("Error centering on location:", e);
     } finally {
       setCenteringLocation(false);
     }
   }, [centeringLocation]);
 
   // Handle when user manually moves the map
-  const handleRegionChangeComplete = useCallback((region: Region) => {
-    // mark that user moved the map and remember visible region
-    setUserHasMovedMap(true);
-    setVisibleRegion(region);
+  const handleRegionChangeComplete = useCallback(
+    (region: Region) => {
+      // mark that user moved the map and remember visible region
+      setUserHasMovedMap(true);
+      setVisibleRegion(region);
 
-    // debounce calls while user is interacting
-    if (regionDebounceRef.current) {
-      clearTimeout(regionDebounceRef.current);
-    }
-    regionDebounceRef.current = setTimeout(() => {
-      // load locations for the visible region; do not force spinner but ensure fresh results
-      void loadLocations({ force: true, center: region });
-    }, 450);
-  }, [loadLocations]);
+      // debounce calls while user is interacting
+      if (regionDebounceRef.current) {
+        clearTimeout(regionDebounceRef.current);
+      }
+      regionDebounceRef.current = setTimeout(() => {
+        // load locations for the visible region; do not force spinner but ensure fresh results
+        void loadLocations({ force: true, center: region });
+      }, 450);
+    },
+    [loadLocations]
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -314,7 +345,7 @@ export default function TabTwoScreen() {
             <Callout
               onPress={() => {
                 router.push({
-                  pathname: '/option/[id]',
+                  pathname: "/option/[id]",
                   params: {
                     id: location.id,
                     name: location.name,
@@ -323,36 +354,56 @@ export default function TabTwoScreen() {
                     distance: location.distance,
                     latitude: location.coordinate.latitude.toString(),
                     longitude: location.coordinate.longitude.toString(),
-                    snap: location.snap ? 'true' : 'false',
+                    snap: location.snap ? "true" : "false",
                   },
                 });
               }}
             >
               <View style={styles.calloutContainer}>
-                <ThemedText style={styles.calloutTitle}>{location.name}</ThemedText>
+                <ThemedText style={styles.calloutTitle}>
+                  {location.name}
+                </ThemedText>
                 <View style={styles.calloutBadge}>
-                  <ThemedText style={styles.calloutBadgeText}>{location.type}</ThemedText>
+                  <ThemedText style={styles.calloutBadgeText}>
+                    {location.type}
+                  </ThemedText>
                 </View>
                 {location.snap ? (
-                  <View style={[styles.calloutBadge, { backgroundColor: '#e6f7eb' }]}> 
-                    <ThemedText style={[styles.calloutBadgeText, { color: '#166534' }]}>SNAP</ThemedText>
+                  <View
+                    style={[
+                      styles.calloutBadge,
+                      { backgroundColor: "#e6f7eb" },
+                    ]}
+                  >
+                    <ThemedText
+                      style={[styles.calloutBadgeText, { color: "#166534" }]}
+                    >
+                      SNAP
+                    </ThemedText>
                   </View>
                 ) : null}
                 {location.distance && (
-                  <ThemedText style={styles.calloutDistance}>{location.distance}</ThemedText>
+                  <ThemedText style={styles.calloutDistance}>
+                    {location.distance}
+                  </ThemedText>
                 )}
-                
+
                 <View style={styles.calloutDetailsButton}>
-                  <ThemedText style={styles.calloutDetailsText}>Tap for Details →</ThemedText>
+                  <ThemedText style={styles.calloutDetailsText}>
+                    Tap for Details →
+                  </ThemedText>
                 </View>
               </View>
             </Callout>
           </Marker>
         ))}
       </MapView>
-      
+
       <Pressable
-        style={[styles.centerLocationButton, centeringLocation && styles.centerLocationButtonActive]}
+        style={[
+          styles.centerLocationButton,
+          centeringLocation && styles.centerLocationButtonActive,
+        ]}
         onPress={centerOnUserLocation}
         disabled={centeringLocation}
         accessibilityLabel="Center map on my location"
@@ -372,7 +423,9 @@ export default function TabTwoScreen() {
           Explore
         </ThemedText>
         <ThemedText style={styles.headerSubtitle}>
-          {loading ? 'Loading nearby options...' : `${locations.length} food options nearby`}
+          {loading
+            ? "Loading nearby options..."
+            : `${locations.length} food options nearby`}
         </ThemedText>
         {loading && <ActivityIndicator size="small" style={{ marginTop: 8 }} />}
       </ThemedView>
@@ -390,22 +443,22 @@ const styles = StyleSheet.create({
   },
 
   centerLocationButton: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 110,
     right: 18,
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.12,
     shadowRadius: 6,
     elevation: 6,
     borderWidth: 0.5,
-    borderColor: 'rgba(0,0,0,0.08)',
+    borderColor: "rgba(0,0,0,0.08)",
   },
   centerLocationButtonActive: {
     transform: [{ scale: 0.98 }],
@@ -413,35 +466,35 @@ const styles = StyleSheet.create({
   locationArrow: {
     width: 18,
     height: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   locationInnerDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#2563eb',
+    backgroundColor: "#2563eb",
     borderWidth: 2,
-    borderColor: '#ffffff',
+    borderColor: "#ffffff",
     zIndex: 2,
   },
   locationHalo: {
-    position: 'absolute',
+    position: "absolute",
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: 'rgba(37, 99, 235, 0.14)',
+    backgroundColor: "rgba(37, 99, 235, 0.14)",
     zIndex: 1,
   },
   floatingHeader: {
-    position: 'absolute',
+    position: "absolute",
     top: 60,
     left: 20,
     right: 20,
     paddingVertical: 16,
     paddingHorizontal: 20,
     borderRadius: 16,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 12,
@@ -459,50 +512,50 @@ const styles = StyleSheet.create({
     padding: 16,
     minWidth: 240,
     maxWidth: 280,
-    backgroundColor: 'transparent',
+    backgroundColor: "transparent",
     borderRadius: 0,
-    shadowColor: 'transparent',
+    shadowColor: "transparent",
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0,
     shadowRadius: 0,
     elevation: 0,
   },
   calloutTitle: {
-    fontWeight: '700',
+    fontWeight: "700",
     fontSize: 16,
     marginBottom: 6,
-    color: '#1f2937',
+    color: "#1f2937",
   },
   calloutBadge: {
-    backgroundColor: '#e0f2fe',
+    backgroundColor: "#e0f2fe",
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
-    alignSelf: 'flex-start',
+    alignSelf: "flex-start",
     marginBottom: 4,
   },
   calloutBadgeText: {
-    color: '#0369a1',
+    color: "#0369a1",
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   calloutDistance: {
     fontSize: 13,
     opacity: 0.7,
     marginBottom: 12,
-    color: '#6b7280',
+    color: "#6b7280",
   },
   calloutDetailsButton: {
-    backgroundColor: '#2563eb',
+    backgroundColor: "#2563eb",
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 8,
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 8,
   },
   calloutDetailsText: {
-    color: '#ffffff',
+    color: "#ffffff",
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: "600",
   },
 });
