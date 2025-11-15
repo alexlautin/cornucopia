@@ -27,6 +27,32 @@ export default function TabTwoScreen() {
   const hasLoadedRef = useRef<boolean>(false);
   const mapRef = useRef<MapView | null>(null);
 
+  // Map pin color by place type
+  const pinColorMap: Record<string, string> = {
+    'Food Bank': '#b91c1c',
+    'Food Pantry': '#b91c1c',
+    'Soup Kitchen': '#f59e0b',
+    'Meal Delivery': '#16a34a',
+    'Community Center': '#7c3aed',
+    'Place of Worship': '#0ea5e9',
+    'Charity': '#fb7185',
+    'Social Facility': '#06b6d4',
+    'Supermarket': '#059669',
+    'Greengrocer': '#22c55e',
+    'Convenience Store': '#f973a0',
+    'Bakery': '#f97316',
+    'Deli': '#f97316',
+    'Market': '#f59e0b',
+    'Farmers Market': '#f59e0b',
+    'Other': '#2563eb',
+  };
+
+  const getPinColor = (type?: string) => {
+    if (!type) return pinColorMap['Other'];
+    const key = type.trim();
+    return pinColorMap[key] ?? pinColorMap['Other'];
+  };
+
   // Get user location immediately on mount
   const getUserLocation = useCallback(async () => {
     try {
@@ -271,7 +297,7 @@ export default function TabTwoScreen() {
           <Marker
             key={location.id}
             coordinate={location.coordinate}
-            pinColor="#2563eb"
+            pinColor={getPinColor(location.type)}
           >
             <Callout
               onPress={() => {

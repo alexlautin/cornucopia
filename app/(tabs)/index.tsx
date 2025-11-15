@@ -133,35 +133,64 @@ export default function HomeScreen() {
         return;
       }
 
-      // Build locations array and reverse-geocode any item that lacks a formatted address
-      const nextLocations = await Promise.all(
-        osmPlaces.map(async (place, index) => {
+      // Build locations array but resolve missing addresses in distance-prioritized batches.
+      // 1) compute numeric distances, 2) sort ascending, 3) batch reverse-geocode (closest batches first).
+      const placesWithMeta = osmPlaces
+        .map((place) => {
           const lat = parseFloat(place.lat);
           const lon = parseFloat(place.lon);
-          const calcDist = getDistance(
-            locationData.coords.latitude,
-            locationData.coords.longitude,
-            lat,
-            lon
-          );
-
-          // Prefer OSM-provided address; fallback to reverse geocode when empty or missing
-          let address = formatOSMAddress(place);
-          if (!address) {
-            const resolved = await reverseGeocodeCoords(lat, lon);
-            address = resolved || `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
-          }
-
-          return {
-            id: place.place_id || `osm-${index}`,
-            name: (place.display_name || '').split(',')[0] || `${lat.toFixed(5)}, ${lon.toFixed(5)}`,
-            address,
-            type: categorizePlace(place),
-            coordinate: { latitude: lat, longitude: lon },
-            distance: formatDistance(calcDist),
-          } as FoodLocation;
+          const distanceNum = Number.isFinite(lat) && Number.isFinite(lon)
+            ? getDistance(locationData.coords.latitude, locationData.coords.longitude, lat, lon)
+            : Number.POSITIVE_INFINITY;
+          return { place, lat, lon, distanceNum };
         })
-      );
+        .filter((m) => Number.isFinite(m.lat) || Number.isFinite(m.lon) || m.place) // keep items (defensive)
+        .sort((a, b) => a.distanceNum - b.distanceNum);
+
+      // Resolve addresses for entries that lack an OSM address, in small prioritized batches.
+      const BATCH_SIZE = 6;
+      for (let i = 0; i < placesWithMeta.length; i += BATCH_SIZE) {
+        const batch = placesWithMeta.slice(i, i + BATCH_SIZE);
+        await Promise.all(
+          batch.map(async (m) => {
+            if (!m.place) return;
+            // If OSM already provides an address, skip reverse geocoding
+            const osmAddr = formatOSMAddress(m.place);
+            if (osmAddr && osmAddr.length) {
+              // mark resolved to avoid later reverse call
+              (m as any).resolvedAddress = osmAddr;
+              return;
+            }
+            // Attempt reverse geocode (priority ensures closer batches run first)
+            try {
+              const resolved = await reverseGeocodeCoords(m.lat, m.lon);
+              (m as any).resolvedAddress = resolved || null;
+            } catch (e) {
+              (m as any).resolvedAddress = null;
+            }
+          })
+        );
+        // small micro-yield to avoid blocking event loop long-term
+        await new Promise((r) => setTimeout(r, 0));
+      }
+
+      // Build final nextLocations in the same prioritized (distance) order
+      const nextLocations: FoodLocation[] = placesWithMeta.map((m, index) => {
+        const lat = m.lat;
+        const lon = m.lon;
+        const calcDist = m.distanceNum;
+        const osmAddr = formatOSMAddress(m.place);
+        const resolved = (m as any).resolvedAddress;
+        const address = osmAddr || resolved || `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+        return {
+          id: m.place.place_id || `osm-${index}`,
+          name: (m.place.display_name || '').split(',')[0] || `${lat.toFixed(5)}, ${lon.toFixed(5)}`,
+          address,
+          type: categorizePlace(m.place),
+          coordinate: { latitude: lat, longitude: lon },
+          distance: formatDistance(calcDist),
+        } as FoodLocation;
+      });
 
       const sorted = sortByDistance(nextLocations);
       setSortedLocations(sorted);
