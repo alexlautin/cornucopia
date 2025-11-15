@@ -211,6 +211,12 @@ export default function HomeScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      {/* Sticky header */}
+      <View style={styles.stickyHeader}>
+        <ThemedText type="title" style={styles.header}>Cornucopia</ThemedText>
+        <ThemedText type="default" style={styles.subtitle}>Find fresh, affordable food nearby.</ThemedText>
+      </View>
+      
       <FlatList
         data={loading || isInitializing.current ? [] : filteredLocations}
         keyExtractor={(item) => item.id}
@@ -221,9 +227,6 @@ export default function HomeScreen() {
         contentContainerStyle={{ paddingBottom: 28 }}
         ListHeaderComponent={
           <View style={{ marginBottom: 8 }}>
-            <ThemedText type="title" style={styles.header}>Cornucopia</ThemedText>
-            <ThemedText type="default" style={styles.subtitle}>Find fresh, affordable food nearby.</ThemedText>
-
             <View style={styles.searchContainer}>
               <View style={styles.searchBox}>
                 <ThemedText style={styles.searchIcon}>🔎</ThemedText>
@@ -252,7 +255,7 @@ export default function HomeScreen() {
             </View>
 
             <ThemedView style={[styles.scoreCard, styles.elevated]}>
-              <ThemedText type="subtitle">Food Access Score</ThemedText>
+              <ThemedText type="subtitle">Food Walkability Score</ThemedText>
               <ThemedText type="title" style={[styles.scoreValue, { color: score.color }]}>{score.label}</ThemedText>
               <View style={styles.progressBar}>
                 <View style={[styles.progressFill, { width: `${Math.round(score.pct * 100)}%`, backgroundColor: score.color }]} />
@@ -361,10 +364,17 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, gap: 12, paddingTop: 60, backgroundColor: '#ffffff', paddingBottom: 20 },
+  container: { flex: 1, backgroundColor: '#ffffff', paddingTop: 60 },
+  stickyHeader: { 
+    paddingHorizontal: 20, 
+    paddingBottom: 12, 
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6'
+  },
   header: { marginTop: 4, fontSize: 34, fontWeight: '700', letterSpacing: 0.5 },
   subtitle: { marginBottom: 6, opacity: 0.75 },
-  searchContainer: { marginTop: 8, marginBottom: 4 },
+  searchContainer: { marginTop: 8, marginBottom: 4, paddingHorizontal: 20 },
   searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f3f4f6', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: '#e5e7eb' },
   searchIcon: { fontSize: 16, marginRight: 8 },
   searchInput: { flex: 1, fontSize: 16, paddingVertical: 4 },
@@ -375,18 +385,18 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: '#1a73e8', borderColor: '#1a73e8' },
   chipText: { fontSize: 13, color: '#374151' },
   chipTextActive: { color: 'white', fontWeight: '600' },
-  scoreCard: { padding: 16, borderRadius: 14, borderWidth: 1, borderColor: '#e5e5e5', backgroundColor: 'white' },
+  scoreCard: { padding: 16, borderRadius: 14, borderWidth: 1, borderColor: '#e5e5e5', backgroundColor: 'white', marginHorizontal: 20 },
   elevated: { shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 2 },
   scoreValue: { fontSize: 30, fontWeight: '700', marginVertical: 4 },
   progressBar: { height: 8, borderRadius: 6, backgroundColor: '#eef2f7', overflow: 'hidden', marginVertical: 8 },
   progressFill: { height: '100%', borderRadius: 6 },
   scoreDescription: { opacity: 0.9, fontSize: 13, lineHeight: 18, color: '#374151' },
-  sectionDivider: { height: 1, backgroundColor: '#f3f4f6', marginVertical: 14 },
-  sectionHeader: { marginTop: 10 },
-  resultsMeta: { fontSize: 12, color: '#6b7280', marginBottom: 4 },
+  sectionDivider: { height: 1, backgroundColor: '#f3f4f6', marginVertical: 14, marginHorizontal: 20 },
+  sectionHeader: { marginTop: 10, paddingHorizontal: 20 },
+  resultsMeta: { fontSize: 12, color: '#6b7280', marginBottom: 4, paddingHorizontal: 20 },
   loadingContainer: { padding: 16, alignItems: 'center', justifyContent: 'center' },
   loadingText: { fontSize: 16, opacity: 0.7 },
-  optionCard: { padding: 14, borderRadius: 12, borderWidth: 0, backgroundColor: 'white', marginVertical: 6 },
+  optionCard: { padding: 14, borderRadius: 12, borderWidth: 0, backgroundColor: 'white', marginVertical: 6, marginHorizontal: 20 },
   cardElevated: { shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 1 },
   cardPressed: { transform: [{ scale: 0.997 }], opacity: 0.98 },
   cardRow: { flexDirection: 'row', alignItems: 'center' },

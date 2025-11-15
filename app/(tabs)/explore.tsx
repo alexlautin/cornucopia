@@ -22,9 +22,84 @@ export default function TabTwoScreen() {
   const [loading, setLoading] = useState(true);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [centeringLocation, setCenteringLocation] = useState(false);
+  const [userHasMovedMap, setUserHasMovedMap] = useState(false);
   const lastLoadedRef = useRef<number>(0);
   const hasLoadedRef = useRef<boolean>(false);
   const mapRef = useRef<MapView | null>(null);
+
+  // Get user location immediately on mount
+  const getUserLocation = useCallback(async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+      
+      const location = await Location.getCurrentPositionAsync({});
+      const newLocation = {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      };
+      
+      setUserLocation(newLocation);
+      
+      // Auto-center on user location if they haven't moved the map
+      if (!userHasMovedMap && mapRef.current) {
+        mapRef.current.animateToRegion({
+          ...newLocation,
+          latitudeDelta: 0.05,
+          longitudeDelta: 0.05,
+        }, 1000);
+      }
+    } catch (error) {
+      console.error('Error getting user location:', error);
+    }
+  }, [userHasMovedMap]);
+
+  // Initialize user location on mount
+  useEffect(() => {
+    getUserLocation();
+    
+    // Set up location watching
+    const watchLocation = async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') return;
+        
+        return await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.Balanced,
+            timeInterval: 10000, // Update every 10 seconds
+            distanceInterval: 50, // Update if moved 50 meters
+          },
+          (location) => {
+            const newLocation = {
+              latitude: location.coords.latitude,
+              longitude: location.coords.longitude,
+            };
+            
+            setUserLocation(newLocation);
+            
+            // Auto-center on user location if they haven't moved the map
+            if (!userHasMovedMap && mapRef.current) {
+              mapRef.current.animateToRegion({
+                ...newLocation,
+                latitudeDelta: 0.05,
+                longitudeDelta: 0.05,
+              }, 1000);
+            }
+          }
+        );
+      } catch (error) {
+        console.error('Error watching location:', error);
+      }
+    };
+    
+    let subscription: Location.LocationSubscription | undefined;
+    watchLocation().then(sub => subscription = sub);
+    
+    return () => {
+      subscription?.remove();
+    };
+  }, [userHasMovedMap]);
 
   const loadLocations = useCallback(async (opts?: { force?: boolean }) => {
     const isStale = Date.now() - lastLoadedRef.current > STALE_MS;
@@ -41,10 +116,13 @@ export default function TabTwoScreen() {
       }
 
       const location = await Location.getCurrentPositionAsync({});
-      setUserLocation({
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-      });
+      // Update user location if we don't have it yet
+      if (!userLocation) {
+        setUserLocation({
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+        });
+      }
 
       console.log('Fetching OSM data...');
       // Fetch real data from OSM
@@ -112,11 +190,12 @@ export default function TabTwoScreen() {
       lastLoadedRef.current = Date.now();
       setLoading(false);
     }
-  }, [locations]);
+  }, [locations, userLocation]);
 
   const centerOnUserLocation = useCallback(async () => {
     if (centeringLocation) return;
     setCenteringLocation(true);
+    setUserHasMovedMap(false); // Reset the flag when manually centering
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
@@ -143,6 +222,11 @@ export default function TabTwoScreen() {
     }
   }, [centeringLocation]);
 
+  // Handle when user manually moves the map
+  const handleRegionChangeComplete = useCallback(() => {
+    setUserHasMovedMap(true);
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       loadLocations();
@@ -161,11 +245,11 @@ export default function TabTwoScreen() {
     return unsubscribe;
   }, [loadLocations]);
 
-  // Center map: prefer user location, otherwise center on first location so markers are visible
-  const mapRegion = userLocation || (locations.length ? locations[0].coordinate : {
+  // Center map: prefer user location, fallback to default Atlanta coordinates
+  const mapRegion = userLocation || {
     latitude: 33.7676,
     longitude: -84.3908,
-  });
+  };
 
   return (
     <View style={styles.container}>
@@ -175,9 +259,10 @@ export default function TabTwoScreen() {
         provider={PROVIDER_DEFAULT}
         initialRegion={{
           ...mapRegion,
-          latitudeDelta: 0.15,
-          longitudeDelta: 0.15,
+          latitudeDelta: 0.05,
+          longitudeDelta: 0.05,
         }}
+        onRegionChangeComplete={handleRegionChangeComplete}
         showsUserLocation
         showsMyLocationButton
         showsCompass
@@ -222,7 +307,6 @@ export default function TabTwoScreen() {
         ))}
       </MapView>
       
-      {/* Center location button */}
       <Pressable
         style={[styles.centerLocationButton, centeringLocation && styles.centerLocationButtonActive]}
         onPress={centerOnUserLocation}
@@ -238,7 +322,7 @@ export default function TabTwoScreen() {
           </View>
         )}
       </Pressable>
-+
+
       <ThemedView style={styles.floatingHeader}>
         <ThemedText type="title" style={styles.headerTitle}>
           Explore
