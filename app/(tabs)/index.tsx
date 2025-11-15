@@ -29,7 +29,7 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [sortedLocations, setSortedLocations] = useState<FoodLocation[]>([]);
   const [query, setQuery] = useState('');
-  const filters = ['All', 'SNAP', 'Pantry', 'Grocery', 'Market', 'Food Bank'] as const;
+  const filters = ['All', 'SNAP/EBT', 'Pantry', 'Grocery', 'Market', 'Food Bank'] as const;
   const [activeFilter, setActiveFilter] = useState<typeof filters[number]>('All');
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const hasInitialLoad = useRef(false);
@@ -235,7 +235,7 @@ export default function HomeScreen() {
         if (activeFilter === 'Grocery') return /grocery|supermarket|store/.test(t);
         if (activeFilter === 'Market') return /market|farmer/.test(t);
         if (activeFilter === 'Food Bank') return /bank/.test(t);
-        if (activeFilter === 'SNAP') return Boolean(l.snap);
+        if (activeFilter === 'SNAP/EBT') return Boolean(l.snap);
         return true;
       });
     }
@@ -442,14 +442,14 @@ export default function HomeScreen() {
                     onPress={() => setActiveFilter(f)} 
                     style={[
                       styles.chip, 
-                      f === 'SNAP' ? styles.snapChip : null,
-                      activeFilter === f && (f === 'SNAP' ? styles.snapChipActive : styles.chipActive)
+                      f === 'SNAP/EBT' ? styles.snapChip : null,
+                      activeFilter === f && (f === 'SNAP/EBT' ? styles.snapChipActive : styles.chipActive)
                     ]}
                   >
                     <ThemedText style={[
                       styles.chipText, 
-                      f === 'SNAP' ? styles.snapChipText : null,
-                      activeFilter === f && (f === 'SNAP' ? styles.snapChipTextActive : styles.chipTextActive)
+                      f === 'SNAP/EBT' ? styles.snapChipText : null,
+                      activeFilter === f && (f === 'SNAP/EBT' ? styles.snapChipTextActive : styles.chipTextActive)
                     ]}>
                       {f}
                     </ThemedText>
