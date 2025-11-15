@@ -196,17 +196,26 @@ export default function OptionDetailsScreen() {
   return (
     <ThemedView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <ThemedText type="title" style={styles.title}>{name}</ThemedText>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <Pressable onPress={toggleFavorite} style={[styles.headerShareBtn, isFavorite && styles.headerFavorited]}>
-              <ThemedText style={[styles.headerShareText, isFavorite && styles.headerFavoritedText]}>
-                {isFavorite ? 'Saved' : 'Save'}
-              </ThemedText>
-            </Pressable>
-            <Pressable onPress={handleSharePlace} style={styles.headerShareBtn}>
-              <ThemedText style={styles.headerShareText}>Share</ThemedText>
-            </Pressable>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+          <View style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+            <ThemedText type="title" style={styles.title}>{name}</ThemedText>
+            <View style={styles.headerActionsRow}>
+              <Pressable
+                onPress={toggleFavorite}
+                style={({ pressed }) => [styles.headerSaveBtnBelow, isFavorite && styles.headerFavorited, pressed && { opacity: 0.85 }]}
+              >
+                <ThemedText style={[styles.headerActionText, isFavorite && styles.headerFavoritedText]}>
+                  {isFavorite ? 'Saved' : 'Save'}
+                </ThemedText>
+              </Pressable>
+
+              <Pressable
+                onPress={handleSharePlace}
+                style={({ pressed }) => [styles.headerShareBtnBelow, pressed && { opacity: 0.85 }]}
+              >
+                <ThemedText style={styles.headerActionText}>Share</ThemedText>
+              </Pressable>
+            </View>
           </View>
         </View>
         
@@ -322,19 +331,23 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   snapLabel: {
-    marginLeft: 8,
+    marginLeft: 6,
     backgroundColor: '#e6f7eb',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: 6, // tighter horizontal padding
+    paddingVertical: 3,   // tighter vertical padding
+    borderRadius: 12,     // slightly smaller radius
     borderWidth: 1,
     borderColor: '#bfe5ca',
+    alignSelf: 'flex-start',
+    flexShrink: 1,
+    minWidth: 0,
   },
   snapLabelText: {
     color: '#166534',
-    fontSize: 12,
+    fontSize: 11, // smaller font to reduce width
     fontWeight: '700',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
+    lineHeight: 14,
   },
   card: {
     padding: 16,
@@ -382,6 +395,43 @@ const styles = StyleSheet.create({
   headerShareText: {
     color: '#1a73e8',
     fontWeight: '700',
+  },
+  // Row for inline action buttons under the title; ensures vertical centering
+  headerActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  // Matched action button styles so Save and Share render exactly the same height
+  headerSaveBtnBelow: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#eef6ff',
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+    minHeight: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerShareBtnBelow: {
+    marginLeft: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#eef6ff',
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+    minHeight: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Shared text style for header actions to keep typography identical
+  headerActionText: {
+    color: '#1a73e8',
+    fontWeight: '700',
+    fontSize: 14,
+    lineHeight: 18,
   },
   headerFavorited: {
     backgroundColor: '#1a73e8',
