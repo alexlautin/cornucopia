@@ -81,7 +81,7 @@ export default function TabLayout() {
             fontWeight: '600',
             letterSpacing: 0.2,
             textAlign: 'center',
-            transform: [{ translateX: -4 }],
+            transform: [{ translateX: -6 }],
           },
         }}
       />

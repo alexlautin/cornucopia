@@ -40,7 +40,6 @@ export default function RootLayout() {
             }}
           />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-          <Stack.Screen name="signin" options={{ title: 'Sign In' }} />
         </Stack>
       </AppBackground>
       <StatusBar style="auto" />

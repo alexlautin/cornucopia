@@ -33,12 +33,12 @@ const hoursMemoryCache = new Map<string, string[]>();
 
 // Rate limiting: minimum delay between API calls (milliseconds)
 const MIN_REQUEST_DELAY_MS = 2000; // 2 seconds minimum between requests
+const OVERPASS_RETRY_LIMIT = 3;
+const OVERPASS_RETRY_BASE_DELAY = 5000; // 5 seconds extra wait on 429
 let lastOverpassRequestTime = 0;
 
 // Max distance (miles) to include in results
 const MAX_DISTANCE_MI = 2.5;
-const EXPANDED_DISTANCE_MI = 7.5;
-
 // Overpass response types
 type OverpassElement = {
   type: 'node' | 'way' | 'relation';
@@ -75,68 +75,84 @@ async function fetchOverpassFoodLocations(
 
   const query = `[out:json];(node["shop"="supermarket"]${bbox};way["shop"="supermarket"]${bbox};node["shop"="greengrocer"]${bbox};way["shop"="greengrocer"]${bbox};node["amenity"="food_bank"]${bbox};way["amenity"="food_bank"]${bbox};node["amenity"="soup_kitchen"]${bbox};way["amenity"="soup_kitchen"]${bbox};node["shop"="bakery"]${bbox};way["shop"="bakery"]${bbox};node["shop"="convenience"]${bbox};way["shop"="convenience"]${bbox};);out body;>;out skel qt;`;
 
-  try {
-    console.log('Overpass query:', query);
-    const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
-    lastOverpassRequestTime = Date.now();
-    
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'FoodPantryApp/1.0 (Educational Project)',
-        Accept: 'application/json',
-      },
-    });
+  let attempt = 0;
+  while (attempt <= OVERPASS_RETRY_LIMIT) {
+    try {
+      console.log('Overpass query:', query);
+      const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+      lastOverpassRequestTime = Date.now();
 
-    if (res.status === 429) {
-      console.error('Overpass rate limit exceeded (429)');
-      return [];
-    }
-
-    if (!res.ok) {
-      console.error('Overpass API error:', res.status, res.statusText);
-      return [];
-    }
-
-    const json = await res.json();
-    console.log('Overpass response:', json);
-    const elements: OverpassElement[] = json?.elements ?? [];
-
-    const toPlace = (el: OverpassElement): OSMPlace | null => {
-      const lat = el.lat ?? el.center?.lat;
-      const lon = el.lon ?? el.center?.lon;
-      if (lat == null || lon == null) return null;
-
-      const tags = el.tags ?? {};
-      const display =
-        tags.name ||
-        tags['operator'] ||
-        tags['brand'] ||
-        `${tags.shop || tags.amenity || 'Food resource'} (${el.type}/${el.id})`;
-      const openingRaw = tags.opening_hours as string | undefined;
-      const formatted = openingRaw ? formatOpeningHoursLines(openingRaw) : undefined;
-
-      return {
-        place_id: `overpass_${el.type}_${el.id}`,
-        lat: String(lat),
-        lon: String(lon),
-        display_name: display,
-        type: tags.shop || tags.amenity || 'food_resource',
-        address: {
-          house_number: tags['addr:housenumber'],
-          road: tags['addr:street'],
-          city: tags['addr:city'] || tags['addr:town'] || tags['addr:village'],
-          state: tags['addr:state'],
-          postcode: tags['addr:postcode'],
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'FoodPantryApp/1.0 (Educational Project)',
+          Accept: 'application/json',
         },
-        openingHours: formatted,
-      };
-    };
+      });
 
-    return elements.map(toPlace).filter(Boolean) as OSMPlace[];
-  } catch (e) {
-    console.error('Overpass API error:', e);
-    return [];
+      if (res.status === 429) {
+        attempt += 1;
+        if (attempt > OVERPASS_RETRY_LIMIT) {
+          console.error('Overpass rate limit exceeded (429) – giving up');
+          return [];
+        }
+        const wait = OVERPASS_RETRY_BASE_DELAY * attempt;
+        console.warn(`Overpass rate limit hit (429). Retrying in ${wait}ms (attempt ${attempt})`);
+        await new Promise((r) => setTimeout(r, wait));
+        continue;
+      }
+
+      if (!res.ok) {
+        console.error('Overpass API error:', res.status, res.statusText);
+        return [];
+      }
+
+      const json = await res.json();
+      const elements: OverpassElement[] = json?.elements ?? [];
+
+      const toPlace = (el: OverpassElement): OSMPlace | null => {
+        const lat = el.lat ?? el.center?.lat;
+        const lon = el.lon ?? el.center?.lon;
+        if (lat == null || lon == null) return null;
+
+        const tags = el.tags ?? {};
+        const display =
+          tags.name ||
+          tags['operator'] ||
+          tags['brand'] ||
+          `${tags.shop || tags.amenity || 'Food resource'} (${el.type}/${el.id})`;
+        const openingRaw = tags.opening_hours as string | undefined;
+        const formatted = openingRaw ? formatOpeningHoursLines(openingRaw) : undefined;
+
+        return {
+          place_id: `overpass_${el.type}_${el.id}`,
+          lat: String(lat),
+          lon: String(lon),
+          display_name: display,
+          type: tags.shop || tags.amenity || 'food_resource',
+          address: {
+            house_number: tags['addr:housenumber'],
+            road: tags['addr:street'],
+            city: tags['addr:city'] || tags['addr:town'] || tags['addr:village'],
+            state: tags['addr:state'],
+            postcode: tags['addr:postcode'],
+          },
+          openingHours: formatted,
+        };
+      };
+
+      return elements.map(toPlace).filter(Boolean) as OSMPlace[];
+    } catch (e) {
+      attempt += 1;
+      if (attempt > OVERPASS_RETRY_LIMIT) {
+        console.error('Overpass API error (giving up):', e);
+        return [];
+      }
+      const wait = OVERPASS_RETRY_BASE_DELAY * attempt;
+      console.warn(`Overpass fetch failed (${e}). Retrying in ${wait}ms`);
+      await new Promise((r) => setTimeout(r, wait));
+    }
   }
+  return [];
 }
 
 // Helper: hydrate opening hours for places that don't have them yet
@@ -244,14 +260,16 @@ export async function searchNearbyFoodLocations(
           return { place, distance };
         });
 
-        return resultsWithDistance
-          .filter((item) => item.distance <= MAX_DISTANCE_MI)
+        const base = resultsWithDistance.filter((item) => item.distance <= MAX_DISTANCE_MI);
+        const pool = base.length ? base : resultsWithDistance;
+
+        return pool
           .sort((a, b) => a.distance - b.distance)
-          .map((item) => item.place)
-          .slice(0, 100);
+          .slice(0, 100)
+          .map((item) => item.place);
       };
 
-      let cappedResults = computeClosest(overpassResults);
+      const cappedResults = computeClosest(overpassResults);
 
       // Hydrate opening hours (cached, then network where needed)
       await hydrateOpeningHours(cappedResults);
@@ -369,6 +387,13 @@ async function fetchOverpassOpeningHoursById(overpassId: string): Promise<string
   }
 }
 
+const cacheClearListeners = new Set<() => void>();
+
+export function onOSMCacheCleared(listener: () => void) {
+  cacheClearListeners.add(listener);
+  return () => cacheClearListeners.delete(listener);
+}
+
 // Add this export to clear all in-memory caches from this module
 export async function clearOSMMemoryCache() {
   memoryCache.clear();
@@ -392,4 +417,12 @@ export async function clearOSMMemoryCache() {
   } catch (e) {
     console.warn('OSM: Persistent cache clear failed', e);
   }
+
+  cacheClearListeners.forEach((cb) => {
+    try {
+      cb();
+    } catch {
+      // ignore individual listener failures
+    }
+  });
 }
