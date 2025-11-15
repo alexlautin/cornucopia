@@ -89,7 +89,7 @@ export default function TabLayout() {
             letterSpacing: 0.2,
             textAlign: 'center',
             marginTop: 0,
-            transform: [{ translateX: 3 }],
+            transform: [{ translateX: -4 }],
           },
           tabBarItemStyle: {
             alignItems: 'center',

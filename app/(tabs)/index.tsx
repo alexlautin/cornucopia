@@ -200,141 +200,147 @@ export default function HomeScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <ThemedText type="title" style={styles.header}>Cornucopia</ThemedText>
-      <ThemedText type="default" style={styles.subtitle}>Find fresh, affordable food nearby.</ThemedText>
+      <FlatList
+        data={loading || isInitializing.current ? [] : filteredLocations}
+        keyExtractor={(item) => item.id}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        onEndReached={onEndReached}
+        onEndReachedThreshold={0.2}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 28 }}
+        ListHeaderComponent={
+          <View style={{ marginBottom: 8 }}>
+            <ThemedText type="title" style={styles.header}>Cornucopia</ThemedText>
+            <ThemedText type="default" style={styles.subtitle}>Find fresh, affordable food nearby.</ThemedText>
 
-      <View style={styles.searchContainer}>
-        <View style={styles.searchBox}>
-          <ThemedText style={styles.searchIcon}>🔎</ThemedText>
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search by name or address"
-            placeholderTextColor="#8a8a8a"
-            style={styles.searchInput}
-            returnKeyType="search"
-          />
-          {query.length > 0 && (
-            <Pressable onPress={() => setQuery('')} style={styles.clearBtn}>
-              <ThemedText style={styles.clearTxt}>✕</ThemedText>
-            </Pressable>
-          )}
-        </View>
+            <View style={styles.searchContainer}>
+              <View style={styles.searchBox}>
+                <ThemedText style={styles.searchIcon}>🔎</ThemedText>
+                <TextInput
+                  value={query}
+                  onChangeText={setQuery}
+                  placeholder="Search by name or address"
+                  placeholderTextColor="#8a8a8a"
+                  style={styles.searchInput}
+                  returnKeyType="search"
+                />
+                {query.length > 0 && (
+                  <Pressable onPress={() => setQuery('')} style={styles.clearBtn}>
+                    <ThemedText style={styles.clearTxt}>✕</ThemedText>
+                  </Pressable>
+                )}
+              </View>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
-          {filters.map((f) => (
-            <Pressable key={f} onPress={() => setActiveFilter(f)} style={[styles.chip, activeFilter === f && styles.chipActive]}>
-              <ThemedText style={[styles.chipText, activeFilter === f && styles.chipTextActive]}>{f}</ThemedText>
-            </Pressable>
-          ))}
-        </ScrollView>
-      </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
+                {filters.map((f) => (
+                  <Pressable key={f} onPress={() => setActiveFilter(f)} style={[styles.chip, activeFilter === f && styles.chipActive]}>
+                    <ThemedText style={[styles.chipText, activeFilter === f && styles.chipTextActive]}>{f}</ThemedText>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
 
-      <ThemedView style={[styles.scoreCard, styles.elevated]}>
-        <ThemedText type="subtitle">Food Access Score</ThemedText>
-        <ThemedText type="title" style={[styles.scoreValue, { color: score.color }]}>{score.label}</ThemedText>
-        <View style={styles.progressBar}>
-          <View style={[styles.progressFill, { width: `${Math.round(score.pct * 100)}%`, backgroundColor: score.color }]} />
-        </View>
-        <ThemedText style={styles.scoreDescription}>{score.hint}</ThemedText>
-      </ThemedView>
+            <ThemedView style={[styles.scoreCard, styles.elevated]}>
+              <ThemedText type="subtitle">Food Access Score</ThemedText>
+              <ThemedText type="title" style={[styles.scoreValue, { color: score.color }]}>{score.label}</ThemedText>
+              <View style={styles.progressBar}>
+                <View style={[styles.progressFill, { width: `${Math.round(score.pct * 100)}%`, backgroundColor: score.color }]} />
+              </View>
+              <ThemedText style={styles.scoreDescription}>{score.hint}</ThemedText>
+            </ThemedView>
 
-      <ThemedView style={styles.sectionDivider} />
+            <ThemedView style={styles.sectionDivider} />
 
-      <ThemedText type="subtitle" style={styles.sectionHeader}>Nearest Options</ThemedText>
-      {lastUpdated !== null && !isInitializing.current && (
-        <ThemedText style={styles.resultsMeta}>
-          Showing {filteredLocations.length} result{filteredLocations.length === 1 ? '' : 's'}
-          {filteredLocations.length !== sortedLocations.length ? ` (of ${sortedLocations.length} total)` : ''} · Updated {formattedLastUpdated}
-        </ThemedText>
-      )}
+            <ThemedText type="subtitle" style={styles.sectionHeader}>Nearest Options</ThemedText>
+            {lastUpdated !== null && !isInitializing.current && (
+              <ThemedText style={styles.resultsMeta}>
+                Showing {filteredLocations.length} result{filteredLocations.length === 1 ? '' : 's'}
+                {filteredLocations.length !== sortedLocations.length ? ` (of ${sortedLocations.length} total)` : ''} · Updated {formattedLastUpdated}
+              </ThemedText>
+            )}
 
-      {loading || isInitializing.current ? (
-        <View style={styles.loadingContainer}>
-          <ThemedText style={styles.loadingText}>Loading options...</ThemedText>
-        </View>
-      ) : (
-        <FlatList
-          data={filteredLocations}
-          keyExtractor={(item) => item.id}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          onEndReached={onEndReached}
-          onEndReachedThreshold={0.2}
-          contentContainerStyle={{ paddingBottom: 28 }}
-          ListEmptyComponent={
+            {(loading || isInitializing.current) && (
+              <View style={styles.loadingContainer}>
+                <ThemedText style={styles.loadingText}>Loading options...</ThemedText>
+              </View>
+            )}
+          </View>
+        }
+        ListEmptyComponent={
+          !loading && !isInitializing.current && (
             <View style={{ padding: 24, alignItems: 'center' }}>
               <ThemedText style={{ opacity: 0.7, marginBottom: 8 }}>No locations found nearby.</ThemedText>
               <Pressable onPress={() => { setQuery(''); setActiveFilter('All'); }} style={styles.resetBtn}>
                 <ThemedText style={{ color: 'white', fontWeight: '600' }}>Clear filters</ThemedText>
               </Pressable>
             </View>
-          }
-          renderItem={({ item }) => (
-            <Pressable
-              android_ripple={{ color: '#00000010' }}
-              onPress={() =>
-                router.push({
-                  pathname: '/option/[id]',
-                  params: {
-                    id: item.id,
-                    name: item.name,
-                    type: item.type,
-                    address: item.address,
-                    distance: item.distance,
-                  },
-                })
-              }
-              style={({ pressed }) => [styles.optionCard, styles.cardElevated, pressed && styles.cardPressed]}
-            >
-              <View style={styles.cardRow}>
-                <View style={styles.leading}>
-                  <View style={styles.leadingIcon}>
-                    <ThemedText style={styles.leadingEmoji}>{typeEmoji(item.type)}</ThemedText>
-                  </View>
+          )
+        }
+        renderItem={({ item }) => (
+          <Pressable
+            android_ripple={{ color: '#00000010' }}
+            onPress={() =>
+              router.push({
+                pathname: '/option/[id]',
+                params: {
+                  id: item.id,
+                  name: item.name,
+                  type: item.type,
+                  address: item.address,
+                  distance: item.distance,
+                },
+              })
+            }
+            style={({ pressed }) => [styles.optionCard, styles.cardElevated, pressed && styles.cardPressed]}
+          >
+            <View style={styles.cardRow}>
+              <View style={styles.leading}>
+                <View style={styles.leadingIcon}>
+                  <ThemedText style={styles.leadingEmoji}>{typeEmoji(item.type)}</ThemedText>
                 </View>
-
-                <View style={styles.middle}>
-                  <View style={styles.titleRow}>
-                    <ThemedText type="defaultSemiBold" numberOfLines={1} style={styles.optionTitle}>{item.name}</ThemedText>
-                    <ThemedText style={styles.distancePill}>{item.distance}</ThemedText>
-                  </View>
-
-                  <View style={styles.subRow}>
-                    <View style={styles.metaRow}>
-                      <View style={styles.metaDot} />
-                      <ThemedText style={styles.subtleText} numberOfLines={1}>{item.type}</ThemedText>
-                    </View>
-                  </View>
-
-                  <View style={styles.addrRow}>
-                    <ThemedText style={styles.addrIcon}>📍</ThemedText>
-                    <ThemedText style={styles.optionAddress} numberOfLines={1}>{item.address}</ThemedText>
-                  </View>
-                </View>
-
-                <Pressable
-                  style={styles.chevronButton}
-                  onPress={() =>
-                    router.push({
-                      pathname: '/option/[id]',
-                      params: {
-                        id: item.id,
-                        name: item.name,
-                        type: item.type,
-                        address: item.address,
-                        distance: item.distance,
-                      },
-                    })
-                  }
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <ThemedText style={styles.chevron}>›</ThemedText>
-                </Pressable>
               </View>
-            </Pressable>
-          )}
-        />
-      )}
+
+              <View style={styles.middle}>
+                <View style={styles.titleRow}>
+                  <ThemedText type="defaultSemiBold" numberOfLines={1} style={styles.optionTitle}>{item.name}</ThemedText>
+                  <ThemedText style={styles.distancePill}>{item.distance}</ThemedText>
+                </View>
+
+                <View style={styles.subRow}>
+                  <View style={styles.metaRow}>
+                    <View style={styles.metaDot} />
+                    <ThemedText style={styles.subtleText} numberOfLines={1}>{item.type}</ThemedText>
+                  </View>
+                </View>
+
+                <View style={styles.addrRow}>
+                  <ThemedText style={styles.addrIcon}>📍</ThemedText>
+                  <ThemedText style={styles.optionAddress} numberOfLines={1}>{item.address}</ThemedText>
+                </View>
+              </View>
+
+              <Pressable
+                style={styles.chevronButton}
+                onPress={() =>
+                  router.push({
+                    pathname: '/option/[id]',
+                    params: {
+                      id: item.id,
+                      name: item.name,
+                      type: item.type,
+                      address: item.address,
+                      distance: item.distance,
+                    },
+                  })
+                }
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <ThemedText style={styles.chevron}>›</ThemedText>
+              </Pressable>
+            </View>
+          </Pressable>
+        )}
+      />
     </ThemedView>
   );
 }
