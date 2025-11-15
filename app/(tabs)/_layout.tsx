@@ -75,7 +75,26 @@ export default function TabLayout() {
         name="eligibility"
         options={{
           title: 'Eligibility',
-          tabBarIcon: ({ color }) => <IconSymbol size={26} name="checkmark.circle.fill" color={color} />,
+          tabBarIcon: ({ color }) => (
+            <IconSymbol
+              size={26}
+              name="checkmark.circle.fill"
+              color={color}
+              style={{ marginLeft: 10 }}
+            />
+          ),
+          tabBarLabelStyle: {
+            fontSize: 11,
+            fontWeight: '600',
+            letterSpacing: 0.2,
+            textAlign: 'center',
+            marginTop: 0,
+            transform: [{ translateX: 3 }],
+          },
+          tabBarItemStyle: {
+            alignItems: 'center',
+            justifyContent: 'center',
+          },
         }}
       />
       <Tabs.Screen
