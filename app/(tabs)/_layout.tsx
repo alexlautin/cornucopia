@@ -100,7 +100,7 @@ export default function TabLayout() {
             letterSpacing: 0.2,
             textAlign: 'center',
             marginTop: 0,
-            transform: [{ translateX: -2 }],
+            transform: [{ translateX: -6 }],
           },
           tabBarItemStyle: {
             alignItems: 'center',
@@ -118,7 +118,7 @@ export default function TabLayout() {
             fontWeight: '600',
             letterSpacing: 0.2,
             textAlign: 'center',
-            transform: [{ translateX: -4 }],
+            transform: [{ translateX: -10 }],
           },
         }}
       />
