@@ -459,7 +459,7 @@ export default function HomeScreen() {
             </View>
 
             <Pressable
-              onPress={() => router.push('/walkability')}
+              onPress={() => router.push('/Walkability')}
               style={({ pressed }) => [styles.scoreCard, styles.elevated, pressed && { opacity: 0.95 }]}
               accessibilityRole="button"
             >

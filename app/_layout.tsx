@@ -49,8 +49,9 @@ export default function RootLayout() {
             };
           }}
         />
+        {/* Register the Walkability screen (as named on disk) */}
         <Stack.Screen
-          name="walkability"
+          name="Walkability"
           options={{
             title: "Walkability",
             headerBackTitle: "",

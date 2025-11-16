@@ -443,7 +443,8 @@ const styles = StyleSheet.create({
 
   centerLocationButton: {
     position: 'absolute',
-    bottom: 30,
+    // moved up so the button sits higher on the map
+    bottom: 110,
     right: 18,
     width: 48,
     height: 48,

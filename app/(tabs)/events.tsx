@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Button, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -27,6 +27,9 @@ export default function EventsScreen() {
   const [name, setName] = useState('');
   const [type, setType] = useState('');
   const [description, setDescription] = useState('');
+  // events list state
+  const [events, setEvents] = useState<any[]>([]);
+  const [loadingEvents, setLoadingEvents] = useState(false);
   // Date/time fields
   const now = new Date();
   const pad = (n: number) => n.toString().padStart(2, '0');
@@ -47,6 +50,28 @@ export default function EventsScreen() {
   const [postalCode, setPostalCode] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
+  // fetch events from Supabase
+  const fetchEvents = useCallback(async () => {
+    setLoadingEvents(true);
+    try {
+      const { data, error } = await supabase.from('events').select();
+      if (error) {
+        console.error('fetchEvents error', error);
+        setEvents([]);
+      } else {
+        setEvents(Array.isArray(data) ? data : []);
+      }
+    } catch (e) {
+      console.error('fetchEvents unexpected error', e);
+      setEvents([]);
+    } finally {
+      setLoadingEvents(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchEvents();
+  }, [fetchEvents]);
 
   // Helper: validate date (YYYY-MM-DD) and time (HH:MM, 24h)
   function isValidDate(str: string) {
@@ -135,6 +160,8 @@ export default function EventsScreen() {
         setCity('');
         setState('');
         setPostalCode('');
+        // refresh events list after successful submit
+        void fetchEvents();
       }
     } catch (e) {
       console.error('submit event error', e);
@@ -142,7 +169,7 @@ export default function EventsScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [name, type, description, startDate, startTime, endDate, endTime, street, apartment, city, state, postalCode, defaultDate, defaultTime, defaultEndDate, defaultEndTime]);
+  }, [name, type, description, startDate, startTime, endDate, endTime, street, apartment, city, state, postalCode, defaultDate, defaultTime, defaultEndDate, defaultEndTime, fetchEvents]);
 
   return (
     <ThemedView style={styles.container}>
@@ -286,6 +313,35 @@ export default function EventsScreen() {
             <Button title="Submit Event" onPress={handleSubmit} />
           )}
         </View>
+
+        {/* Submitted events shown below the form */}
+        <View style={styles.eventsSection}>
+          <ThemedText type="subtitle" style={styles.eventsHeader}>Submitted Events</ThemedText>
+          {loadingEvents ? (
+            <ActivityIndicator />
+          ) : events.length === 0 ? (
+            <ThemedText style={{ opacity: 0.7 }}>No events submitted yet.</ThemedText>
+          ) : (
+            events.map((e) => {
+              const addr = e.address && typeof e.address === 'object'
+                ? `${e.address.street ?? ''}${e.address.address2 ? ', ' + e.address.address2 : ''}, ${e.address.city ?? ''}${e.address.state ? ', ' + e.address.state : ''} ${e.address.postcode ?? ''}`.trim()
+                : e.address || '';
+              const hours = e.event_hours && typeof e.event_hours === 'object'
+                ? Object.entries(e.event_hours).map(([d, v]: any) => `${d}: ${v.start}–${v.end}`).join(', ')
+                : '';
+              const key = e.place_id ?? e.id ?? `${e.name}-${Math.random()}`;
+              return (
+                <View key={key} style={styles.eventCard}>
+                  <ThemedText style={styles.eventTitle}>{e.name ?? 'Unnamed event'}</ThemedText>
+                  {e.type ? <ThemedText style={styles.eventMeta}>{e.type}</ThemedText> : null}
+                  {addr ? <ThemedText style={styles.eventAddress}>{addr}</ThemedText> : null}
+                  {hours ? <ThemedText style={styles.eventMeta}>{hours}</ThemedText> : null}
+                </View>
+              );
+            })
+          )}
+          <Button title="Refresh events" onPress={() => void fetchEvents()} />
+        </View>
       </ScrollView>
       </KeyboardAvoidingView>
     </ThemedView>
@@ -311,4 +367,17 @@ const styles = StyleSheet.create({
   multiline: { minHeight: 100, textAlignVertical: 'top' },
   timeRow: { flexDirection: 'row', gap: 12 },
   actions: { marginTop: 12 },
+  eventsSection: { marginTop: 20, gap: 8 },
+  eventsHeader: { marginBottom: 8 },
+  eventCard: {
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#fff',
+    marginBottom: 10,
+  },
+  eventTitle: { fontWeight: '700', fontSize: 16, marginBottom: 2 },
+  eventMeta: { fontSize: 13, color: '#6b7280', marginBottom: 4 },
+  eventAddress: { fontSize: 13, color: '#374151', marginBottom: 4 },
 });
