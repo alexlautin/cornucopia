@@ -531,6 +531,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0,
     shadowRadius: 0,
     elevation: 0,
+    alignItems: 'flex-start',
   },
   calloutTitle: {
     fontWeight: '700',
@@ -543,6 +544,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexWrap: 'wrap',
     marginBottom: 4,
+    justifyContent: 'flex-start',
+    alignSelf: 'flex-start',
   },
   calloutBadge: {
     backgroundColor: '#e0f2fe',
