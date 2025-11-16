@@ -355,6 +355,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e5e5e5',
     gap: 6,
+    marginVertical: 12, // added: space between stacked cards
+    paddingVertical: 12, // slightly more vertical padding for breathing room
   },
   addressNavButton: {
     alignSelf: 'flex-start',
