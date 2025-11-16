@@ -380,6 +380,7 @@ export default function TabTwoScreen() {
                     latitude: location.coordinate.latitude.toString(),
                     longitude: location.coordinate.longitude.toString(),
                     snap: location.snap ? 'true' : 'false',
+                    ...(location.priceLevel ? { price: String(location.priceLevel) } : {}),
                   },
                 });
               }}

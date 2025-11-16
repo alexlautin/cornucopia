@@ -322,6 +322,7 @@ export default function HomeScreen() {
             latitude: item.coordinate.latitude.toString(),
             longitude: item.coordinate.longitude.toString(),
             snap: item.snap ? 'true' : 'false',
+            ...(item.priceLevel ? { price: String(item.priceLevel) } : {}),
             ...(hours ? { hours: JSON.stringify(hours) } : {}),
           },
         });
@@ -339,6 +340,7 @@ export default function HomeScreen() {
             latitude: item.coordinate.latitude.toString(),
             longitude: item.coordinate.longitude.toString(),
             snap: item.snap ? 'true' : 'false',
+            ...(item.priceLevel ? { price: String(item.priceLevel) } : {}),
           },
         });
       }
@@ -594,6 +596,7 @@ export default function HomeScreen() {
                                   latitude: item.coordinate.latitude.toString(),
                                   longitude: item.coordinate.longitude.toString(),
                                   snap: item.snap ? 'true' : 'false',
+                                  ...(item.priceLevel ? { price: String(item.priceLevel) } : {}),
                                 },
                               });
                             }}

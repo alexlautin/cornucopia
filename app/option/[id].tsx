@@ -20,6 +20,7 @@ export default function OptionDetailsScreen() {
     latitude?: string;
     longitude?: string;
     snap?: string;
+    price?: string;
   }>();
 
   const name = params.name ?? 'Location';
@@ -29,6 +30,7 @@ export default function OptionDetailsScreen() {
   const latitude = params.latitude ? parseFloat(params.latitude) : undefined;
   const longitude = params.longitude ? parseFloat(params.longitude) : undefined;
   const snap = params.snap === 'true';
+  const priceLevel = params.price ? Math.max(1, Math.min(3, parseInt(params.price, 10))) : undefined;
   const isOSMData = params.id?.startsWith('osm-') || (params.id && params.id.length > 10);
 
   // Declare state hooks first (stable order)
@@ -229,12 +231,17 @@ export default function OptionDetailsScreen() {
           <View style={styles.typeLabel}>
             <ThemedText style={styles.typeLabelText}>{type}</ThemedText>
           </View>
+          {snap ? (
+            <View style={styles.snapLabel}>
+              <ThemedText style={styles.snapLabelText}>SNAP</ThemedText>
+            </View>
+          ) : null}
+          {priceLevel ? (
+            <View style={styles.priceLabel}>
+              <ThemedText style={styles.priceLabelText}>{'$'.repeat(priceLevel)}</ThemedText>
+            </View>
+          ) : null}
         </View>
-        {snap ? (
-          <View style={styles.snapLabel}>
-            <ThemedText style={styles.snapLabelText}>SNAP</ThemedText>
-          </View>
-        ) : null}
 
         <ThemedView style={styles.card}>
           <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
@@ -318,6 +325,7 @@ const styles = StyleSheet.create({
   labelContainer: {
     flexDirection: 'row',
     marginBottom: 8,
+    alignItems: 'center',
   },
   typeLabel: {
     backgroundColor: '#2563eb',
@@ -342,6 +350,25 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     minWidth: 0,
   },
+    priceLabel: {
+      marginLeft: 6,
+      backgroundColor: '#eef2ff',
+      paddingHorizontal: 6,
+      paddingVertical: 3,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: '#dcd7fe',
+      alignSelf: 'flex-start',
+      flexShrink: 1,
+      minWidth: 0,
+    },
+    priceLabelText: {
+      color: '#3730a3',
+      fontSize: 11,
+      fontWeight: '700',
+      letterSpacing: 0.3,
+      lineHeight: 14,
+    },
   snapLabelText: {
     color: '#166534',
     fontSize: 11, // smaller font to reduce width
