@@ -36,6 +36,10 @@ export default function TabTwoScreen() {
   const hasLoadedRef = useRef<boolean>(false);
   const mapRef = useRef<MapView | null>(null);
 
+  // Guard against rapid double-opens when markers overlap
+  const navigatingRef = useRef<boolean>(false);
+  const lastOpenRef = useRef<{ id?: string; ts: number }>({ ts: 0 });
+
   // Prevent overlapping fetches that would all force on initial load
   const isFetchingRef = useRef<boolean>(false);
 
@@ -347,6 +351,34 @@ export default function TabTwoScreen() {
             coordinate={location.coordinate}
             pinColor={getMarkerColor(location.type)}
             tracksViewChanges={trackMarkerUpdates}
+            onCalloutPress={() => {
+              const now = Date.now();
+              if (navigatingRef.current) return;
+              if (now - lastOpenRef.current.ts < 700) return;
+              navigatingRef.current = true;
+              lastOpenRef.current = { id: location.id, ts: now };
+
+              router.push({
+                pathname: "/option/[id]",
+                params: {
+                  id: location.id,
+                  name: location.name,
+                  type: location.type,
+                  address: location.address,
+                  distance: location.distance,
+                  latitude: location.coordinate.latitude.toString(),
+                  longitude: location.coordinate.longitude.toString(),
+                  snap: location.snap ? "true" : "false",
+                  ...(location.priceLevel
+                    ? { price: String(location.priceLevel) }
+                    : {}),
+                },
+              });
+
+              setTimeout(() => {
+                navigatingRef.current = false;
+              }, 800);
+            }}
           >
             <View
               style={[
@@ -358,26 +390,7 @@ export default function TabTwoScreen() {
                 {typeEmoji(location.type)}
               </ThemedText>
             </View>
-            <Callout
-              onPress={() => {
-                router.push({
-                  pathname: "/option/[id]",
-                  params: {
-                    id: location.id,
-                    name: location.name,
-                    type: location.type,
-                    address: location.address,
-                    distance: location.distance,
-                    latitude: location.coordinate.latitude.toString(),
-                    longitude: location.coordinate.longitude.toString(),
-                    snap: location.snap ? "true" : "false",
-                    ...(location.priceLevel
-                      ? { price: String(location.priceLevel) }
-                      : {}),
-                  },
-                });
-              }}
-            >
+            <Callout>
               <View style={styles.calloutContainer}>
                 <ThemedText style={styles.calloutTitle}>
                   {location.name}
