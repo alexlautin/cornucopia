@@ -20,7 +20,6 @@ import {
   onOSMCacheCleared,
 } from "@/utils/osm-api";
 
-const STALE_MS = 5 * 60 * 1000;
 const DEBUG =
   (typeof process !== "undefined" &&
     (process.env.EXPO_PUBLIC_DEBUG_OSM === "1" ||
@@ -29,6 +28,19 @@ const DEBUG =
 const dlog = (...args: any[]) => {
   if (DEBUG) console.log("EXPLORE:", ...args);
 };
+
+const DEFAULT_REGION: Region = {
+  latitude: 33.7676,
+  longitude: -84.3908,
+  latitudeDelta: 0.05,
+  longitudeDelta: 0.05,
+};
+const MAX_DATASET = 2500;
+const MAX_MARKERS = 2300;
+const MAX_RADIUS_MILES = 40;
+const STALE_MS = 5 * 60 * 1000;
+const REGION_DEBOUNCE_MS = 10;
+const MARKER_BATCH_SIZE = 60;
 
 export default function TabTwoScreen() {
   const [locations, setLocations] = useState<FoodLocation[]>(foodLocations);
@@ -40,44 +52,19 @@ export default function TabTwoScreen() {
   const [centeringLocation, setCenteringLocation] = useState(false);
   const [userHasMovedMap, setUserHasMovedMap] = useState(false);
   const [trackMarkerUpdates, setTrackMarkerUpdates] = useState(true);
+  const [displayedMarkers, setDisplayedMarkers] = useState<FoodLocation[]>([]);
   const lastLoadedRef = useRef<number>(0);
   const hasLoadedRef = useRef<boolean>(false);
   const mapRef = useRef<MapView | null>(null);
 
   // Track visible region to fetch what's in the field of view
-  const [visibleRegion, setVisibleRegion] = useState<Region | null>(null);
-  const regionDebounceRef = useRef<any>(null);
+  const [visibleRegion, setVisibleRegion] = useState<Region>(DEFAULT_REGION);
   // Track last request key to avoid duplicate fetches/logs for same center
   const lastRequestKeyRef = useRef<string | null>(null);
   const lastRequestTsRef = useRef<number>(0);
   // Prevent overlapping fetches that would all force on initial load
   const isFetchingRef = useRef<boolean>(false);
-
-  // Map pin color by place type
-  const pinColorMap: Record<string, string> = {
-    "Food Bank": "#b91c1c",
-    "Food Pantry": "#b91c1c",
-    "Soup Kitchen": "#f59e0b",
-    "Meal Delivery": "#16a34a",
-    "Community Center": "#7c3aed",
-    "Place of Worship": "#0ea5e9",
-    Charity: "#fb7185",
-    "Social Facility": "#06b6d4",
-    Supermarket: "#059669",
-    Greengrocer: "#22c55e",
-    "Convenience Store": "#f973a0",
-    Bakery: "#f97316",
-    Deli: "#f97316",
-    Market: "#f59e0b",
-    "Farmers Market": "#f59e0b",
-    Other: "#2563eb",
-  };
-
-  const getPinColor = (type?: string) => {
-    if (!type) return pinColorMap["Other"];
-    const key = type.trim();
-    return pinColorMap[key] ?? pinColorMap["Other"];
-  };
+  const regionDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Get user location immediately on mount
   const getUserLocation = useCallback(async () => {
@@ -157,42 +144,30 @@ export default function TabTwoScreen() {
     return () => {
       subscription?.remove();
     };
-  }, [userHasMovedMap]);
+  }, [getUserLocation, userHasMovedMap]);
 
   // Accept an optional center/region so results match the visible map area.
   const loadLocations = useCallback(
-    async (opts?: { force?: boolean; center?: Region }) => {
+    async (opts?: { force?: boolean }) => {
       const isStale = Date.now() - lastLoadedRef.current > STALE_MS;
       // If caller didn't force and we've loaded recently, short-circuit.
-      if (!opts?.force && hasLoadedRef.current && !isStale && !opts?.center)
-        return;
+      if (!opts?.force && hasLoadedRef.current && !isStale) return;
 
       // show spinner for first load or when forcing and we have no data
       if ((!hasLoadedRef.current || opts?.force) && locations.length === 0)
         setLoading(true);
 
       try {
-        let centerLat: number;
-        let centerLon: number;
-
-        if (opts?.center) {
-          // Use provided center (map's visible region) instead of device location
-          centerLat = opts.center.latitude;
-          centerLon = opts.center.longitude;
-          // update userLocation so distance badges remain meaningful
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+          setLoading(false);
+          return;
+        }
+        const location = await Location.getCurrentPositionAsync({});
+        const centerLat = location.coords.latitude;
+        const centerLon = location.coords.longitude;
+        if (!userLocation) {
           setUserLocation({ latitude: centerLat, longitude: centerLon });
-        } else {
-          const { status } = await Location.requestForegroundPermissionsAsync();
-          if (status !== "granted") {
-            setLoading(false);
-            return;
-          }
-          const location = await Location.getCurrentPositionAsync({});
-          centerLat = location.coords.latitude;
-          centerLon = location.coords.longitude;
-          if (!userLocation) {
-            setUserLocation({ latitude: centerLat, longitude: centerLon });
-          }
         }
 
         // Deduplicate same-center requests in quick succession (e.g., focus + initial region events)
@@ -225,7 +200,11 @@ export default function TabTwoScreen() {
 
         if (osmPlaces && osmPlaces.length > 0) {
           const m0 = Date.now();
-          const mappedLocations: FoodLocation[] = osmPlaces.map(
+          type RankedLocation = {
+            location: FoodLocation;
+            distanceValue: number;
+          };
+          const rankedLocations: RankedLocation[] = osmPlaces.map(
             (place, index) => {
               const lat = parseFloat(place.lat ?? "0");
               const lon = parseFloat(place.lon ?? "0");
@@ -239,26 +218,37 @@ export default function TabTwoScreen() {
                     )
                   : undefined;
               return {
-                id: place.place_id || `osm-${index}`,
-                name: place.display_name.split(",")[0],
-                address: formatOSMAddress(place),
-                type: categorizePlace(place),
-                coordinate: { latitude: lat, longitude: lon },
-                distance: formatDistance(distMiles),
-                snap: Boolean((place as any).snap),
-                priceLevel: pl as 1 | 2 | 3 | undefined,
+                distanceValue: distMiles,
+                location: {
+                  id: place.place_id || `osm-${index}`,
+                  name: place.display_name.split(",")[0],
+                  address: formatOSMAddress(place),
+                  type: categorizePlace(place),
+                  coordinate: { latitude: lat, longitude: lon },
+                  distance: formatDistance(distMiles),
+                  snap: Boolean((place as any).snap),
+                  priceLevel: pl as 1 | 2 | 3 | undefined,
+                },
               };
             }
           );
+          rankedLocations.sort((a, b) => a.distanceValue - b.distanceValue);
+          const nearby = rankedLocations.filter(
+            (entry) => entry.distanceValue <= MAX_RADIUS_MILES
+          );
+          const source = nearby.length > 0 ? nearby : rankedLocations;
+          const limitedLocations = source
+            .slice(0, MAX_DATASET)
+            .map((entry) => entry.location);
           dlog("load.map.done", {
             mapMs: Date.now() - m0,
-            count: mappedLocations.length,
+            count: limitedLocations.length,
           });
           // Enable tracking just for the next paint, then disable to reduce churn
           setTrackMarkerUpdates(true);
-          setLocations(mappedLocations);
+          setLocations(limitedLocations);
           dlog("load.setLocations", {
-            count: mappedLocations.length,
+            count: limitedLocations.length,
             totalMs: Date.now() - t0,
           });
           setTimeout(() => setTrackMarkerUpdates(false), 600);
@@ -273,12 +263,18 @@ export default function TabTwoScreen() {
               loc.coordinate.longitude
             ),
           }));
-          const sorted = withDistances.sort(
+          const sortedByDistance = withDistances.sort(
             (a, b) => a.calculatedDistance - b.calculatedDistance
           );
+          const nearbyFallback = sortedByDistance.filter(
+            (loc) => loc.calculatedDistance <= MAX_RADIUS_MILES
+          );
+          const sourceFallback =
+            nearbyFallback.length > 0 ? nearbyFallback : sortedByDistance;
+          const limitedFallback = sourceFallback.slice(0, MAX_DATASET);
           setTrackMarkerUpdates(true);
           setLocations(
-            sorted.map((loc) => ({
+            limitedFallback.map((loc) => ({
               ...loc,
               distance: formatDistance(loc.calculatedDistance),
             }))
@@ -294,7 +290,7 @@ export default function TabTwoScreen() {
         setLoading(false);
       }
     },
-    [userLocation]
+    [locations.length, userLocation]
   );
 
   const centerOnUserLocation = useCallback(async () => {
@@ -331,23 +327,27 @@ export default function TabTwoScreen() {
   }, [centeringLocation]);
 
   // Handle when user manually moves the map
-  const handleRegionChangeComplete = useCallback(
-    (region: Region) => {
-      // mark that user moved the map and remember visible region
-      setUserHasMovedMap(true);
+  const handleRegionChangeComplete = useCallback((region: Region) => {
+    setUserHasMovedMap(true);
+    if (regionDebounceRef.current) {
+      clearTimeout(regionDebounceRef.current);
+    }
+    regionDebounceRef.current = setTimeout(() => {
+      dlog("region.update", {
+        latitude: region.latitude.toFixed(4),
+        longitude: region.longitude.toFixed(4),
+      });
       setVisibleRegion(region);
+    }, REGION_DEBOUNCE_MS);
+  }, []);
 
-      // debounce calls while user is interacting
+  useEffect(() => {
+    return () => {
       if (regionDebounceRef.current) {
         clearTimeout(regionDebounceRef.current);
       }
-      regionDebounceRef.current = setTimeout(() => {
-        // load locations for the visible region; rely on cache (no force)
-        void loadLocations({ center: region });
-      }, 450);
-    },
-    [loadLocations]
-  );
+    };
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -363,7 +363,7 @@ export default function TabTwoScreen() {
       hasLoadedRef.current = false;
       lastLoadedRef.current = 0;
       // reload for current visible region if available, otherwise device location
-      void loadLocations({ force: true, center: visibleRegion ?? undefined });
+      void loadLocations({ force: true });
     });
 
     return unsubscribe;
@@ -426,7 +426,8 @@ export default function TabTwoScreen() {
 
   // Only render markers within the current viewport (with small padding)
   const markersInView = useMemo<FoodLocation[]>(() => {
-    if (!visibleRegion) return locations;
+    const base = locations.slice(0, MAX_MARKERS);
+    if (!visibleRegion) return base;
     const pad = 1.2;
     const minLat =
       visibleRegion.latitude - visibleRegion.latitudeDelta * pad * 0.5;
@@ -436,7 +437,7 @@ export default function TabTwoScreen() {
       visibleRegion.longitude - visibleRegion.longitudeDelta * pad * 0.5;
     const maxLon =
       visibleRegion.longitude + visibleRegion.longitudeDelta * pad * 0.5;
-    return locations.filter((l) => {
+    const filtered = locations.filter((l) => {
       const { latitude, longitude } = l.coordinate;
       return (
         latitude >= minLat &&
@@ -445,7 +446,67 @@ export default function TabTwoScreen() {
         longitude <= maxLon
       );
     });
+    if (filtered.length <= MAX_MARKERS) return filtered;
+
+    const centerLat = visibleRegion.latitude;
+    const centerLon = visibleRegion.longitude;
+    type MarkerDistance = { location: FoodLocation; distance: number };
+    const ranked: MarkerDistance[] = filtered.map((location) => ({
+      location,
+      distance: getDistance(
+        centerLat,
+        centerLon,
+        location.coordinate.latitude,
+        location.coordinate.longitude
+      ),
+    }));
+
+    ranked.sort((a, b) => a.distance - b.distance);
+    return ranked.slice(0, MAX_MARKERS).map((entry) => entry.location);
   }, [locations, visibleRegion]);
+
+  useEffect(() => {
+    let isCancelled = false;
+    if (markersInView.length === 0) {
+      setDisplayedMarkers([]);
+      return () => {
+        isCancelled = true;
+      };
+    }
+
+    let nextCount = Math.min(
+      displayedMarkers.length || MARKER_BATCH_SIZE,
+      markersInView.length
+    );
+    const initialSlice = markersInView.slice(0, nextCount);
+    setDisplayedMarkers((prev) => {
+      if (prev.length === initialSlice.length) return prev;
+      return initialSlice;
+    });
+    const scheduleBatch = () => {
+      if (isCancelled) return;
+      nextCount = Math.min(markersInView.length, nextCount + MARKER_BATCH_SIZE);
+      setDisplayedMarkers(markersInView.slice(0, nextCount));
+      dlog("markers.batch", { nextCount, total: markersInView.length });
+      if (nextCount < markersInView.length) {
+        requestAnimationFrame(scheduleBatch);
+      }
+    };
+
+    requestAnimationFrame(scheduleBatch);
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [markersInView, displayedMarkers.length]);
+
+  const markerCountLabel = useMemo(() => {
+    if (loading) return "Loading nearby options...";
+    if (markersInView.length === 0) return "No options in view";
+    const capped = markersInView.length === MAX_MARKERS;
+    const suffix = capped ? " (showing closest)" : "";
+    return `${markersInView.length} food options nearby${suffix}`;
+  }, [loading, markersInView.length]);
 
   return (
     <View style={styles.container}>
@@ -463,10 +524,11 @@ export default function TabTwoScreen() {
         showsMyLocationButton
         showsCompass
       >
-        {markersInView.map((location: FoodLocation) => (
+        {displayedMarkers.map((location: FoodLocation) => (
           <Marker
             key={location.id}
             coordinate={location.coordinate}
+            pinColor={getMarkerColor(location.type)}
             tracksViewChanges={trackMarkerUpdates}
           >
             <View
@@ -579,9 +641,7 @@ export default function TabTwoScreen() {
           Explore
         </ThemedText>
         <ThemedText style={styles.headerSubtitle}>
-          {loading
-            ? "Loading nearby options..."
-            : `${locations.length} food options nearby`}
+          {markerCountLabel}
         </ThemedText>
         {loading && <ActivityIndicator size="small" style={{ marginTop: 8 }} />}
       </ThemedView>
@@ -726,14 +786,14 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   markerContainer: {
-    backgroundColor: "#2563eb", // default color, will be overridden
-    borderRadius: 20,
-    width: 36,
-    height: 36,
+    backgroundColor: "#2563eb",
+    borderRadius: 18,
+    width: 32,
+    height: 32,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 3,
-    borderColor: "white",
+    borderWidth: 2,
+    borderColor: "#ffffff",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
@@ -742,7 +802,7 @@ const styles = StyleSheet.create({
   },
   markerEmoji: {
     fontSize: 18,
-    textShadowColor: "rgba(0,0,0,0.3)",
+    textShadowColor: "rgba(0,0,0,0.25)",
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
   },
