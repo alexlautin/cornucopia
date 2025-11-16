@@ -67,9 +67,10 @@ function mapSupabasePlace(record: SupabaseOSMRecord): OSMPlace | null {
   const address = normalizeAddress(record.address ?? undefined);
   const display =
     (record.normalized_name ?? record.name) || address?.road || "Food resource";
-  const price = typeof record.price_level === 'number' && isFinite(record.price_level)
-    ? Math.max(1, Math.min(3, Math.round(record.price_level)))
-    : undefined;
+  const price =
+    typeof record.price_level === "number" && isFinite(record.price_level)
+      ? Math.max(1, Math.min(3, Math.round(record.price_level)))
+      : undefined;
   return {
     place_id: record.place_id,
     lat: String(record.lat),
@@ -297,7 +298,12 @@ export function formatOSMAddress(place: OSMPlace): string {
 }
 
 export function categorizePlace(place: OSMPlace): string {
+  const rawType = (place.type || "").trim();
+  if (!rawType) return "Other";
+
+  // Normalize common OSM-style keys and align to our app display labels.
   const categoryMap: Record<string, string> = {
+    // Legacy/OSM normalizations
     food_bank: "Food Bank",
     soup_kitchen: "Soup Kitchen",
     community_centre: "Community Center",
@@ -306,13 +312,34 @@ export function categorizePlace(place: OSMPlace): string {
     social_facility: "Social Facility",
     supermarket: "Supermarket",
     greengrocer: "Greengrocer",
-    convenience: "Convenience Store",
+    convenience: "Convenience", // prefer concise label
     bakery: "Bakery",
-    market: "Market",
+    market: "Marketplace",
+    marketplace: "Marketplace",
     deli: "Deli",
+
+    // Supabase type pass-throughs (Title Case)
+    Bakery: "Bakery",
+    Butcher: "Butcher",
+    Convenience: "Convenience",
+    "Farmers And Markets": "Farmers And Markets",
+    Greengrocer: "Greengrocer",
+    "Grocery Store": "Grocery Store",
+    Marketplace: "Marketplace",
+    Other: "Other",
+    "Specialty Store": "Specialty Store",
+    Supermarket: "Supermarket",
   };
 
-  return categoryMap[place.type] || place.type || "Other";
+  // Special rule: count any Health Food as Farmers And Markets
+  if (/^health[ _]food$/i.test(rawType)) return "Farmers And Markets";
+
+  return (
+    categoryMap[rawType] ||
+    categoryMap[rawType.toLowerCase()] ||
+    rawType ||
+    "Other"
+  );
 }
 
 // Cache-clear listener helpers
