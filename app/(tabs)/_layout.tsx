@@ -33,23 +33,28 @@ export default function TabLayout() {
         },
         tabBarStyle: {
           position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: 0,
           borderTopWidth: 0,
-          height: 56,
-          paddingBottom: Platform.OS === "ios" ? 8 : 4,
-          paddingTop: 4,
-          backgroundColor: "transparent",
-          // remove shadow/elevation so underlying content is visible
-          shadowColor: "transparent",
-          shadowOpacity: 0,
-          shadowOffset: { width: 0, height: 0 },
-          shadowRadius: 0,
-          elevation: 0,
+          height: Platform.OS === "ios" ? 86 : 70,
+          paddingBottom: Platform.OS === "ios" ? 18 : 10,
+          paddingTop: 10,
+          borderRadius: 0,
+          backgroundColor: "rgba(255,255,255,0.92)",
+          borderColor: "rgba(148,163,184,0.16)",
+          borderWidth: 0,
+          shadowColor: "#0f172a",
+          shadowOpacity: 0.04,
+          shadowOffset: { width: 0, height: -2 },
+          shadowRadius: 12,
+          elevation: 6,
         },
         tabBarBackground: () => (
           // keep a transparent background element for compatibility, no visual fill
           <BlurView
             tint="light"
-            intensity={20}
+            intensity={35}
             style={{ flex: 1, backgroundColor: "transparent" }}
           />
         ),

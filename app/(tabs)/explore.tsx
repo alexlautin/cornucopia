@@ -323,6 +323,8 @@ export default function TabTwoScreen() {
     ? "No options available"
     : `${locations.length} food options nearby`;
 
+  const hudSubtitle = loading ? "Scanning for fresh food..." : markerCountLabel;
+
   return (
     <View style={styles.container}>
       <MapView
@@ -451,13 +453,11 @@ export default function TabTwoScreen() {
         )}
       </Pressable>
 
-      <ThemedView style={styles.floatingHeader}>
+      <ThemedView style={styles.floatingHeader} intensity={80}>
         <ThemedText type="title" style={styles.headerTitle}>
-          Explore
+          Explore nearby
         </ThemedText>
-        <ThemedText style={styles.headerSubtitle}>
-          {markerCountLabel}
-        </ThemedText>
+        <ThemedText style={styles.headerSubtitle}>{hudSubtitle}</ThemedText>
         {loading && <ActivityIndicator size="small" style={{ marginTop: 8 }} />}
       </ThemedView>
     </View>
@@ -478,44 +478,44 @@ const styles = StyleSheet.create({
     // moved up so the button sits higher on the map
     bottom: 110,
     right: 18,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#ffffff",
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "rgba(15,23,42,0.9)",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    elevation: 6,
-    borderWidth: 0.5,
-    borderColor: "rgba(0,0,0,0.08)",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
   },
   centerLocationButtonActive: {
     transform: [{ scale: 0.98 }],
   },
   locationArrow: {
-    width: 18,
-    height: 18,
+    width: 22,
+    height: 22,
     alignItems: "center",
     justifyContent: "center",
   },
   locationInnerDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#2563eb",
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#60a5fa",
     borderWidth: 2,
-    borderColor: "#ffffff",
+    borderColor: "#0f172a",
     zIndex: 2,
   },
   locationHalo: {
     position: "absolute",
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: "rgba(37, 99, 235, 0.14)",
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(96, 165, 250, 0.15)",
     zIndex: 1,
   },
   floatingHeader: {
@@ -523,34 +523,40 @@ const styles = StyleSheet.create({
     top: 60,
     left: 20,
     right: 20,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderRadius: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
+    paddingVertical: 18,
+    paddingHorizontal: 22,
+    borderRadius: 24,
+    gap: 6,
+    backgroundColor: "rgba(15,23,42,0.78)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 18,
+    elevation: 10,
   },
   headerTitle: {
-    fontSize: 28,
-    marginBottom: 4,
+    fontSize: 26,
+    fontWeight: "700",
+    color: "#ffffff",
   },
   headerSubtitle: {
-    opacity: 0.7,
+    opacity: 0.9,
     fontSize: 14,
+    color: "#cbd5f5",
   },
   calloutContainer: {
-    padding: 16,
+    padding: 18,
     minWidth: 240,
     maxWidth: 280,
-    backgroundColor: "transparent",
-    borderRadius: 0,
-    shadowColor: "transparent",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0,
-    shadowRadius: 0,
-    elevation: 0,
+    backgroundColor: "rgba(255,255,255,0.95)",
+    borderRadius: 18,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
     alignItems: "flex-start",
   },
   calloutTitle: {

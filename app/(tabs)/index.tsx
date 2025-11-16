@@ -1,5 +1,5 @@
+import { AppBackground } from "@/components/app-background";
 import { ThemedText } from "@/components/themed-text";
-import { ThemedView } from "@/components/themed-view";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { FoodLocation } from "@/constants/locations";
 import { formatDistance, getDistance } from "@/utils/distance";
@@ -25,8 +25,8 @@ import {
   UIManager,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const DEFAULT_COORDINATE = { latitude: 33.7676, longitude: -84.3908 };
 const DEBUG =
   (typeof process !== "undefined" &&
     (process.env.EXPO_PUBLIC_DEBUG_OSM === "1" ||
@@ -44,6 +44,7 @@ const sortByDistance = (locations: FoodLocation[]) =>
   });
 
 export default function HomeScreen() {
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [sortedLocations, setSortedLocations] = useState<FoodLocation[]>([]);
@@ -109,13 +110,6 @@ export default function HomeScreen() {
     if (/grocery|supermarket|store/.test(normalized)) return "🛒";
     return "🏬";
   }, []);
-
-  const toMiles = (d?: string) => {
-    if (!d) return Number.POSITIVE_INFINITY;
-    const n = parseFloat(d);
-    if (Number.isNaN(n)) return Number.POSITIVE_INFINITY;
-    return /ft/i.test(d) ? n / 5280 : n;
-  };
 
   const reverseGeocodeCache = useRef<Map<string, string | null>>(new Map());
 
@@ -224,7 +218,7 @@ export default function HomeScreen() {
               try {
                 const resolved = await reverseGeocodeCoords(m.lat, m.lon);
                 (m as any).resolvedAddress = resolved || null;
-              } catch (e) {
+              } catch {
                 (m as any).resolvedAddress = null;
               }
             })
@@ -296,7 +290,7 @@ export default function HomeScreen() {
     setTimeout(() => setRefreshing(false), MIN_SPINNER_MS);
   }, [refreshing, getCurrentLocation]);
 
-  const filteredLocations = useMemo(() => {
+  const visibleLocations = useMemo(() => {
     const t0 = Date.now();
     const q = query.trim().toLowerCase();
     let list = [...sortedLocations];
@@ -319,38 +313,37 @@ export default function HomeScreen() {
       );
     }
 
-    const res = list;
     const ms = Date.now() - t0;
     if (DEBUG)
       dlog("filter.done", {
         ms,
-        count: res.length,
+        count: list.length,
         filter: activeFilter,
         qLen: q.length,
       });
-    return res;
-  }, [sortedLocations, activeFilter, query]);
+    return list;
+  }, [sortedLocations, query, activeFilter]);
 
-  // Guarded onEndReached: only try to fetch more when there is something to paginate,
-  // and when we're not already loading/refreshing/initializing.
-  const onEndReached = useCallback(() => {
-    if (loading || refreshing || isInitializing.current) return;
-    // If the active filter results in zero visible items, don't trigger another fetch.
-    if (!filteredLocations || filteredLocations.length === 0) return;
-    void getCurrentLocation(true);
-  }, [
-    getCurrentLocation,
-    loading,
-    refreshing,
-    filteredLocations,
-    isInitializing,
-  ]);
+  const headerStatus = useMemo(() => {
+    if (refreshing) return "Refreshing data...";
+    if (loading) return "Locating nearby options...";
+    if (formattedLastUpdated) return `Updated ${formattedLastUpdated}`;
+    return "Ready to explore";
+  }, [formattedLastUpdated, loading, refreshing]);
 
-  const nearestMi = useMemo(
-    () =>
-      toMiles(filteredLocations[0]?.distance || sortedLocations[0]?.distance),
-    [filteredLocations, sortedLocations]
-  );
+  // Walkability score (simple: based on nearest distance in miles)
+  const toMiles = (d?: string) => {
+    if (!d) return Number.POSITIVE_INFINITY;
+    const n = parseFloat(d);
+    if (Number.isNaN(n)) return Number.POSITIVE_INFINITY;
+    return /ft/i.test(d) ? n / 5280 : n;
+  };
+
+  const nearestMi = useMemo(() => {
+    const first = visibleLocations[0]?.distance || sortedLocations[0]?.distance;
+    return toMiles(first);
+  }, [visibleLocations, sortedLocations]);
+
   const score = useMemo(() => {
     const miles = nearestMi;
     if (!hasInitialLoad.current || !Number.isFinite(miles)) {
@@ -374,6 +367,20 @@ export default function HomeScreen() {
     return { label, pct, color, hint };
   }, [nearestMi]);
 
+  // Guarded onEndReached: only try to fetch more when there is something to paginate,
+  // and when we're not already loading/refreshing/initializing.
+  const onEndReached = useCallback(() => {
+    if (loading || refreshing || isInitializing.current) return;
+    if (!visibleLocations || visibleLocations.length === 0) return;
+    void getCurrentLocation(true);
+  }, [
+    getCurrentLocation,
+    loading,
+    refreshing,
+    visibleLocations,
+    isInitializing,
+  ]);
+
   const handleQuickNavigation = (item: FoodLocation, event: any) => {
     event.stopPropagation();
     openNavigation({
@@ -385,68 +392,6 @@ export default function HomeScreen() {
   };
 
   // NEW: open details with prefetch (reverse geocode + opening hours)
-  const openDetailsWithPrefetch = useCallback(
-    async (item: FoodLocation) => {
-      try {
-        // Resolve address if missing or clearly placeholder
-        let address = item.address;
-        if (!address || /^\d+\.\d+,\s*-?\d+\.\d+/.test(address)) {
-          const resolved = await reverseGeocodeCoords(
-            item.coordinate.latitude,
-            item.coordinate.longitude
-          );
-          address = resolved || address;
-        }
-
-        // Try to prefetch opening hours (best-effort)
-        let hours: string[] | null = null;
-        try {
-          if (item.id) {
-            const fetched = await getOpeningHours(String(item.id));
-            if (fetched && fetched.length > 0) hours = fetched;
-          }
-        } catch (e) {
-          // ignore; details page will attempt fetch if needed
-          console.warn("prefetch getOpeningHours failed", e);
-        }
-
-        router.push({
-          pathname: "/option/[id]",
-          params: {
-            id: item.id,
-            name: item.name,
-            type: item.type,
-            address: address,
-            distance: item.distance,
-            latitude: item.coordinate.latitude.toString(),
-            longitude: item.coordinate.longitude.toString(),
-            snap: item.snap ? "true" : "false",
-            ...(item.priceLevel ? { price: String(item.priceLevel) } : {}),
-            ...(hours ? { hours: JSON.stringify(hours) } : {}),
-          },
-        });
-      } catch (err) {
-        console.error("openDetailsWithPrefetch error", err);
-        // fallback: minimal push
-        router.push({
-          pathname: "/option/[id]",
-          params: {
-            id: item.id,
-            name: item.name,
-            type: item.type,
-            address: item.address,
-            distance: item.distance,
-            latitude: item.coordinate.latitude.toString(),
-            longitude: item.coordinate.longitude.toString(),
-            snap: item.snap ? "true" : "false",
-            ...(item.priceLevel ? { price: String(item.priceLevel) } : {}),
-          },
-        });
-      }
-    },
-    [reverseGeocodeCoords, router]
-  );
-
   // Enable LayoutAnimation on Android
   useEffect(() => {
     if (
@@ -524,413 +469,487 @@ export default function HomeScreen() {
     [expandedId, reverseGeocodeCoords]
   );
 
-  return (
-    <ThemedView style={styles.container}>
-      {/* Sticky header */}
-      <View style={styles.stickyHeader}>
+  const listHeader = (
+    <View style={styles.listHeader}>
+      <View style={styles.hero}>
         <ThemedText type="title" style={styles.header}>
           Cornucopia
         </ThemedText>
         <ThemedText type="default" style={styles.subtitle}>
-          Find fresh, affordable food nearby.
+          Fresh, dignified food access wherever you stand.
         </ThemedText>
+        <Pressable
+          onPress={() => router.push("/Walkability")}
+          style={({ pressed }) => [
+            styles.heroLink,
+            pressed && styles.heroLinkPressed,
+          ]}
+        >
+          <ThemedText style={styles.heroLinkText}>
+            Learn how we grade walkability →
+          </ThemedText>
+        </Pressable>
       </View>
 
-      <FlatList
-        data={loading || isInitializing.current ? [] : filteredLocations}
-        keyExtractor={(item) => item.id}
-        initialNumToRender={16}
-        windowSize={6}
-        maxToRenderPerBatch={24}
-        updateCellsBatchingPeriod={50}
-        removeClippedSubviews
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        onEndReached={onEndReached}
-        onEndReachedThreshold={0.2}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 28 }}
-        ListHeaderComponent={
-          <View style={{ marginBottom: 8 }}>
-            <View style={styles.searchContainer}>
-              <View style={styles.searchBox}>
-                <IconSymbol
-                  name="magnifyingglass"
-                  size={16}
-                  color="#6b7280"
-                  style={styles.searchIcon}
-                />
-                <TextInput
-                  value={query}
-                  onChangeText={setQuery}
-                  placeholder="Search by name or address"
-                  placeholderTextColor="#8a8a8a"
-                  style={styles.searchInput}
-                  returnKeyType="search"
-                />
-                {query.length > 0 && (
-                  <Pressable
-                    onPress={() => setQuery("")}
-                    style={styles.clearBtn}
-                  >
-                    <IconSymbol
-                      name="xmark"
-                      size={12}
-                      color="#374151"
-                      style={styles.clearTxt as any}
-                    />
-                  </Pressable>
-                )}
-              </View>
+      <View style={styles.searchContainer}>
+        <View style={styles.searchBox}>
+          <IconSymbol
+            name="magnifyingglass"
+            size={16}
+            color="#64748b"
+            style={styles.searchIcon}
+          />
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search by name or address"
+            placeholderTextColor="#94a3b8"
+            style={styles.searchInput}
+            returnKeyType="search"
+          />
+          {query.length > 0 && (
+            <Pressable onPress={() => setQuery("")} style={styles.clearBtn}>
+              <IconSymbol
+                name="xmark"
+                size={12}
+                color="#0f172a"
+                style={styles.clearTxt as any}
+              />
+            </Pressable>
+          )}
+        </View>
 
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.chipsRow}
-              >
-                {filters.map((f) => (
-                  <Pressable
-                    key={f}
-                    onPress={() => setActiveFilter(f)}
-                    style={[
-                      styles.chip,
-                      f === "SNAP/EBT" ? styles.snapChip : null,
-                      activeFilter === f &&
-                        (f === "SNAP/EBT"
-                          ? styles.snapChipActive
-                          : styles.chipActive),
-                    ]}
-                  >
-                    <ThemedText
-                      style={[
-                        styles.chipText,
-                        f === "SNAP/EBT" ? styles.snapChipText : null,
-                        activeFilter === f &&
-                          (f === "SNAP/EBT"
-                            ? styles.snapChipTextActive
-                            : styles.chipTextActive),
-                      ]}
-                    >
-                      {f}
-                    </ThemedText>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </View>
-
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipsRow}
+        >
+          {filters.map((f) => (
             <Pressable
-              onPress={() => router.push("/Walkability")}
-              style={({ pressed }) => [
-                styles.scoreCard,
-                styles.elevated,
-                pressed && { opacity: 0.95 },
+              key={f}
+              onPress={() => setActiveFilter(f)}
+              style={[
+                styles.chip,
+                f === "SNAP/EBT" ? styles.snapChip : null,
+                activeFilter === f &&
+                  (f === "SNAP/EBT"
+                    ? styles.snapChipActive
+                    : styles.chipActive),
               ]}
-              accessibilityRole="button"
             >
-              <ThemedText type="subtitle">Food Walkability Score</ThemedText>
               <ThemedText
-                type="title"
-                style={[styles.scoreValue, { color: score.color }]}
+                style={[
+                  styles.chipText,
+                  f === "SNAP/EBT" ? styles.snapChipText : null,
+                  activeFilter === f &&
+                    (f === "SNAP/EBT"
+                      ? styles.snapChipTextActive
+                      : styles.chipTextActive),
+                ]}
               >
-                {score.label}
-              </ThemedText>
-              <View style={styles.progressBar}>
-                <View
-                  style={[
-                    styles.progressFill,
-                    {
-                      width: `${Math.round(score.pct * 100)}%`,
-                      backgroundColor: score.color,
-                    },
-                  ]}
-                />
-              </View>
-              <ThemedText style={styles.scoreDescription}>
-                {score.hint}
-              </ThemedText>
-              <ThemedText style={styles.scoreTapHint}>
-                Tap to learn how this is calculated
+                {f}
               </ThemedText>
             </Pressable>
+          ))}
+        </ScrollView>
+      </View>
 
-            <ThemedView style={styles.sectionDivider} />
-
-            <ThemedText type="subtitle" style={styles.sectionHeader}>
-              Nearest Options
-            </ThemedText>
-            {lastUpdated !== null && !isInitializing.current && (
-              <ThemedText style={styles.resultsMeta}>
-                Showing {filteredLocations.length} result
-                {filteredLocations.length === 1 ? "" : "s"}
-                {filteredLocations.length !== sortedLocations.length
-                  ? ` (of ${sortedLocations.length} total)`
-                  : ""}{" "}
-                · Updated {formattedLastUpdated}
-              </ThemedText>
-            )}
-
-            {(loading || isInitializing.current) && (
-              <View style={styles.loadingContainer}>
-                <ThemedText style={styles.loadingText}>
-                  Loading options...
-                </ThemedText>
-              </View>
-            )}
-          </View>
-        }
-        ListEmptyComponent={
-          !loading && !isInitializing.current ? (
-            <View style={{ padding: 24, alignItems: "center" }}>
-              <ThemedText style={{ opacity: 0.7, marginBottom: 8 }}>
-                No locations found nearby.
-              </ThemedText>
-              <Pressable
-                onPress={() => {
-                  setQuery("");
-                  setActiveFilter("All");
-                }}
-                style={styles.resetBtn}
-              >
-                <ThemedText style={{ color: "white", fontWeight: "600" }}>
-                  Clear filters
-                </ThemedText>
-              </Pressable>
-            </View>
-          ) : null
-        }
-        renderItem={({ item }) => (
-          <Pressable
-            android_ripple={{ color: "#00000010" }}
-            onPress={() => void toggleExpand(item)}
-            style={({ pressed }) => [
-              styles.optionCard,
-              styles.cardElevated,
-              pressed && styles.cardPressed,
+      <Pressable
+        onPress={() => router.push("/Walkability")}
+        style={({ pressed }) => [
+          styles.scoreCard,
+          pressed && styles.cardPressed,
+        ]}
+        accessibilityRole="button"
+      >
+        <ThemedText type="subtitle" style={styles.scoreTitle}>
+          Food Walkability
+        </ThemedText>
+        <ThemedText
+          type="title"
+          style={[styles.scoreValue, { color: score.color }]}
+        >
+          {score.label}
+        </ThemedText>
+        <View style={styles.progressBar}>
+          <View
+            style={[
+              styles.progressFill,
+              {
+                width: `${Math.round(score.pct * 100)}%`,
+                backgroundColor: score.color,
+              },
             ]}
-          >
-            <View style={styles.cardRow}>
-              <View style={styles.leading}>
-                <View style={styles.leadingIcon}>
-                  <ThemedText style={styles.leadingEmoji}>
-                    {typeEmoji(item.type)}
-                  </ThemedText>
-                </View>
-              </View>
+          />
+        </View>
+        <ThemedText style={styles.scoreDescription}>{score.hint}</ThemedText>
+        <ThemedText style={styles.scoreTapHint}>
+          Tap to learn how we calculate this
+        </ThemedText>
+      </Pressable>
 
-              <View style={styles.middle}>
-                <View style={styles.titleRow}>
-                  <ThemedText
-                    type="defaultSemiBold"
-                    numberOfLines={1}
-                    style={styles.optionTitle}
-                  >
-                    {item.name}
-                  </ThemedText>
-                  <ThemedText style={styles.distancePill}>
-                    {item.distance}
-                  </ThemedText>
-                </View>
+      <View style={styles.sectionDivider} />
 
-                <View style={styles.subRow}>
-                  <View style={styles.metaRow}>
-                    <View style={styles.metaDot} />
-                    <ThemedText style={styles.subtleText} numberOfLines={1}>
-                      {item.type}
-                    </ThemedText>
-                  </View>
-                  {item.snap ? (
-                    <View style={styles.snapPill}>
-                      <ThemedText style={styles.snapPillText}>SNAP</ThemedText>
-                    </View>
-                  ) : null}
-                  {item.priceLevel ? (
-                    <View style={styles.pricePill}>
-                      <ThemedText style={styles.pricePillText}>
-                        {"$".repeat(item.priceLevel)}
-                      </ThemedText>
-                    </View>
-                  ) : null}
-                </View>
-
-                {expandedId !== item.id && (
-                  <View style={styles.addrRow}>
-                    <ThemedText style={styles.addrIcon}>📍</ThemedText>
-                    <ThemedText style={styles.optionAddress} numberOfLines={1}>
-                      {item.address}
-                    </ThemedText>
-                  </View>
-                )}
-
-                {/* Inline expanded content (shows resolved address, opening hours, actions) */}
-                {expandedId === item.id && (
-                  <View style={styles.expandedContent}>
-                    {expandedDetails[item.id]?.loading ? (
-                      <ThemedText style={{ marginTop: 8, opacity: 0.8 }}>
-                        Loading details...
-                      </ThemedText>
-                    ) : (
-                      <>
-                        <View
-                          style={{
-                            flexDirection: "row",
-                            alignItems: "center",
-                            marginTop: 10,
-                          }}
-                        >
-                          <IconSymbol name="mappin" size={16} color="#6b7280" />
-                          <ThemedText style={{ marginLeft: 8, flex: 1 }}>
-                            {expandedDetails[item.id]?.address ?? item.address}
-                          </ThemedText>
-                        </View>
-
-                        {expandedDetails[item.id]?.hours &&
-                          expandedDetails[item.id].hours!.length > 0 && (
-                            <View style={{ marginTop: 8 }}>
-                              <ThemedText
-                                type="subtitle"
-                                style={{ marginBottom: 4 }}
-                              >
-                                Opening hours
-                              </ThemedText>
-                              {expandedDetails[item.id].hours!.map((h, idx) => (
-                                <ThemedText key={idx} style={{ fontSize: 13 }}>
-                                  {h}
-                                </ThemedText>
-                              ))}
-                            </View>
-                          )}
-
-                        <View
-                          style={{
-                            flexDirection: "row",
-                            marginTop: 12,
-                            justifyContent: "flex-end",
-                          }}
-                        >
-                          <Pressable
-                            onPress={(e) => {
-                              e.stopPropagation();
-                              handleQuickNavigation(item, e);
-                            }}
-                            style={styles.smallBtn}
-                          >
-                            <ThemedText
-                              style={{ color: "white", fontWeight: "600" }}
-                            >
-                              Navigate →
-                            </ThemedText>
-                          </Pressable>
-
-                          <Pressable
-                            onPress={(e) => {
-                              e.stopPropagation();
-                              router.push({
-                                pathname: "/option/[id]",
-                                params: {
-                                  id: item.id,
-                                  name: item.name,
-                                  type: item.type,
-                                  address:
-                                    expandedDetails[item.id]?.address ??
-                                    item.address,
-                                  distance: item.distance,
-                                  latitude: item.coordinate.latitude.toString(),
-                                  longitude:
-                                    item.coordinate.longitude.toString(),
-                                  snap: item.snap ? "true" : "false",
-                                  ...(item.priceLevel
-                                    ? { price: String(item.priceLevel) }
-                                    : {}),
-                                },
-                              });
-                            }}
-                            style={[styles.smallBtn, styles.smallBtnOutline]}
-                          >
-                            <ThemedText style={{ fontWeight: "600" }}>
-                              Open
-                            </ThemedText>
-                          </Pressable>
-                        </View>
-                      </>
-                    )}
-                  </View>
-                )}
-              </View>
-
-              <Pressable
-                style={styles.chevronButton}
-                onPress={(e) => {
-                  // Prevent the outer Pressable from also receiving this press.
-                  e.stopPropagation?.();
-                  void toggleExpand(item);
-                }}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <ThemedText style={styles.chevron}>
-                  {expandedId === item.id ? "‹" : "›"}
-                </ThemedText>
-              </Pressable>
-            </View>
-          </Pressable>
+      <View style={styles.sectionHeaderRow}>
+        <ThemedText type="subtitle" style={styles.sectionHeader}>
+          Nearest Options
+        </ThemedText>
+        {lastUpdated !== null && !isInitializing.current && (
+          <ThemedText style={styles.resultsMeta}>{headerStatus}</ThemedText>
         )}
-      />
-    </ThemedView>
+      </View>
+
+      {(loading || isInitializing.current) && (
+        <View style={styles.loadingContainer}>
+          <ThemedText style={styles.loadingText}>Loading options...</ThemedText>
+        </View>
+      )}
+    </View>
+  );
+
+  return (
+    <AppBackground>
+      <View style={styles.container}>
+        <FlatList
+          data={loading || isInitializing.current ? [] : visibleLocations}
+          keyExtractor={(item) => item.id}
+          initialNumToRender={16}
+          windowSize={6}
+          maxToRenderPerBatch={24}
+          updateCellsBatchingPeriod={50}
+          removeClippedSubviews
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+          onEndReached={onEndReached}
+          onEndReachedThreshold={0.2}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingTop: Math.max(insets.top) },
+          ]}
+          contentInsetAdjustmentBehavior="always"
+          ListHeaderComponent={listHeader}
+          ListEmptyComponent={
+            !loading && !isInitializing.current ? (
+              <View style={styles.emptyState}>
+                <ThemedText style={styles.emptyStateText}>
+                  No locations found nearby.
+                </ThemedText>
+                <Pressable
+                  onPress={() => {
+                    setQuery("");
+                    setActiveFilter("All");
+                  }}
+                  style={styles.resetBtn}
+                >
+                  <ThemedText style={styles.resetBtnText}>
+                    Clear filters
+                  </ThemedText>
+                </Pressable>
+              </View>
+            ) : null
+          }
+          renderItem={({ item }) => (
+            <Pressable
+              android_ripple={{ color: "#00000010" }}
+              onPress={() => void toggleExpand(item)}
+              style={({ pressed }) => [
+                styles.optionCard,
+                styles.cardElevated,
+                pressed && styles.cardPressed,
+              ]}
+            >
+              <View style={styles.cardRow}>
+                <View style={styles.leading}>
+                  <View style={styles.leadingIcon}>
+                    <ThemedText style={styles.leadingEmoji}>
+                      {typeEmoji(item.type)}
+                    </ThemedText>
+                  </View>
+                </View>
+
+                <View style={styles.middle}>
+                  <View style={styles.titleRow}>
+                    <ThemedText
+                      type="defaultSemiBold"
+                      numberOfLines={1}
+                      style={styles.optionTitle}
+                    >
+                      {item.name}
+                    </ThemedText>
+                    <ThemedText style={styles.distancePill}>
+                      {item.distance}
+                    </ThemedText>
+                  </View>
+
+                  <View style={styles.subRow}>
+                    <View style={styles.metaRow}>
+                      <View style={styles.metaDot} />
+                      <ThemedText style={styles.subtleText} numberOfLines={1}>
+                        {item.type}
+                      </ThemedText>
+                    </View>
+                    {item.snap ? (
+                      <View style={styles.snapPill}>
+                        <ThemedText style={styles.snapPillText}>
+                          SNAP
+                        </ThemedText>
+                      </View>
+                    ) : null}
+                    {item.priceLevel ? (
+                      <View style={styles.pricePill}>
+                        <ThemedText style={styles.pricePillText}>
+                          {"$".repeat(item.priceLevel)}
+                        </ThemedText>
+                      </View>
+                    ) : null}
+                  </View>
+
+                  {expandedId !== item.id && (
+                    <View style={styles.addrRow}>
+                      <ThemedText style={styles.addrIcon}>📍</ThemedText>
+                      <ThemedText
+                        style={styles.optionAddress}
+                        numberOfLines={1}
+                      >
+                        {item.address}
+                      </ThemedText>
+                    </View>
+                  )}
+
+                  {/* Inline expanded content (shows resolved address, opening hours, actions) */}
+                  {expandedId === item.id && (
+                    <View style={styles.expandedContent}>
+                      {expandedDetails[item.id]?.loading ? (
+                        <ThemedText style={{ marginTop: 8, opacity: 0.8 }}>
+                          Loading details...
+                        </ThemedText>
+                      ) : (
+                        <>
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              marginTop: 10,
+                            }}
+                          >
+                            <IconSymbol
+                              name="mappin"
+                              size={16}
+                              color="#6b7280"
+                            />
+                            <ThemedText style={{ marginLeft: 8, flex: 1 }}>
+                              {expandedDetails[item.id]?.address ??
+                                item.address}
+                            </ThemedText>
+                          </View>
+
+                          {expandedDetails[item.id]?.hours &&
+                            expandedDetails[item.id].hours!.length > 0 && (
+                              <View style={{ marginTop: 8 }}>
+                                <ThemedText
+                                  type="subtitle"
+                                  style={{ marginBottom: 4 }}
+                                >
+                                  Opening hours
+                                </ThemedText>
+                                {expandedDetails[item.id].hours!.map(
+                                  (h, idx) => (
+                                    <ThemedText
+                                      key={idx}
+                                      style={{ fontSize: 13 }}
+                                    >
+                                      {h}
+                                    </ThemedText>
+                                  )
+                                )}
+                              </View>
+                            )}
+
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              marginTop: 12,
+                              justifyContent: "flex-end",
+                            }}
+                          >
+                            <Pressable
+                              onPress={(e) => {
+                                e.stopPropagation();
+                                handleQuickNavigation(item, e);
+                              }}
+                              style={styles.smallBtn}
+                            >
+                              <ThemedText
+                                style={{ color: "white", fontWeight: "600" }}
+                              >
+                                Navigate →
+                              </ThemedText>
+                            </Pressable>
+
+                            <Pressable
+                              onPress={(e) => {
+                                e.stopPropagation();
+                                router.push({
+                                  pathname: "/option/[id]",
+                                  params: {
+                                    id: item.id,
+                                    name: item.name,
+                                    type: item.type,
+                                    address:
+                                      expandedDetails[item.id]?.address ??
+                                      item.address,
+                                    distance: item.distance,
+                                    latitude:
+                                      item.coordinate.latitude.toString(),
+                                    longitude:
+                                      item.coordinate.longitude.toString(),
+                                    snap: item.snap ? "true" : "false",
+                                    ...(item.priceLevel
+                                      ? { price: String(item.priceLevel) }
+                                      : {}),
+                                  },
+                                });
+                              }}
+                              style={[styles.smallBtn, styles.smallBtnOutline]}
+                            >
+                              <ThemedText style={{ fontWeight: "600" }}>
+                                Open
+                              </ThemedText>
+                            </Pressable>
+                          </View>
+                        </>
+                      )}
+                    </View>
+                  )}
+                </View>
+
+                <Pressable
+                  style={styles.chevronButton}
+                  onPress={(e) => {
+                    // Prevent the outer Pressable from also receiving this press.
+                    e.stopPropagation?.();
+                    void toggleExpand(item);
+                  }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <ThemedText style={styles.chevron}>
+                    {expandedId === item.id ? "‹" : "›"}
+                  </ThemedText>
+                </Pressable>
+              </View>
+            </Pressable>
+          )}
+        />
+      </View>
+    </AppBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#ffffff", paddingTop: 60 },
-  stickyHeader: {
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-    backgroundColor: "#ffffff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
+  container: {
+    flex: 1,
+    paddingTop: 0,
   },
-  header: { marginTop: 4, fontSize: 34, fontWeight: "700", letterSpacing: 0.5 },
-  subtitle: { marginBottom: 6, opacity: 0.75 },
-  searchContainer: { marginTop: 8, marginBottom: 4, paddingHorizontal: 20 },
+  listContent: {
+    paddingBottom: 120,
+  },
+  listHeader: {
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    paddingTop: 4,
+    gap: 20,
+  },
+  hero: {
+    paddingTop: 0,
+    gap: 12,
+  },
+  heroBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "rgba(99,102,241,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(99,102,241,0.3)",
+  },
+  heroBadgeText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#4c1d95",
+    letterSpacing: 0.4,
+  },
+  header: {
+    fontSize: 36,
+    fontWeight: "700",
+    letterSpacing: 0.3,
+    color: "#0f172a",
+    marginTop: 0,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: "#475569",
+  },
+  heroLink: {
+    alignSelf: "flex-start",
+    marginTop: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+  },
+  heroLinkPressed: {
+    opacity: 0.7,
+  },
+  heroLinkText: {
+    fontSize: 13,
+    color: "#2563eb",
+    fontWeight: "600",
+  },
+  searchContainer: {
+    gap: 12,
+  },
   searchBox: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f3f4f6",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    backgroundColor: "rgba(255,255,255,0.85)",
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "rgba(148,163,184,0.25)",
   },
-  searchIcon: { fontSize: 16, marginRight: 8 },
+  searchIcon: { fontSize: 16, marginRight: 10 },
   searchInput: { flex: 1, fontSize: 16, paddingVertical: 4 },
   clearBtn: {
     marginLeft: 8,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#e5e7eb",
+    backgroundColor: "rgba(148,163,184,0.2)",
   },
-  clearTxt: { fontWeight: "700", opacity: 0.7 },
-  chipsRow: { gap: 8, paddingTop: 10 },
+  clearTxt: { fontWeight: "700", opacity: 0.8 },
+  chipsRow: { gap: 10, paddingTop: 4 },
   chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
     borderRadius: 999,
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "rgba(15,23,42,0.06)",
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "rgba(148,163,184,0.2)",
     marginRight: 8,
   },
-  chipActive: { backgroundColor: "#1a73e8", borderColor: "#1a73e8" },
-  chipText: { fontSize: 13, color: "#374151" },
-  chipTextActive: { color: "white", fontWeight: "600" },
-  // Special SNAP chip styling (green theme to match SNAP pills)
+  chipActive: {
+    backgroundColor: "#1d4ed8",
+    borderColor: "#1d4ed8",
+  },
+  chipText: { fontSize: 13, color: "#475569" },
+  chipTextActive: { color: "#ffffff", fontWeight: "600" },
   snapChip: {
-    backgroundColor: "#e6f7eb",
-    borderColor: "#bfe5ca",
-    borderWidth: 2,
+    backgroundColor: "rgba(22,101,52,0.08)",
+    borderColor: "rgba(22,101,52,0.2)",
+    borderWidth: 1,
   },
   snapChipActive: {
     backgroundColor: "#166534",
@@ -947,82 +966,109 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   scoreCard: {
-    padding: 16,
-    borderRadius: 14,
+    marginTop: 4,
+    padding: 20,
+    borderRadius: 22,
+    backgroundColor: "rgba(99,102,241,0.1)",
     borderWidth: 1,
-    borderColor: "#e5e5e5",
-    backgroundColor: "white",
-    marginHorizontal: 20,
-    marginTop: 10,
+    borderColor: "rgba(99,102,241,0.25)",
   },
-  elevated: {
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+  cardPressed: {
+    transform: [{ scale: 0.997 }],
+    opacity: 0.97,
   },
-  scoreValue: { fontSize: 30, fontWeight: "700", marginVertical: 4 },
+  scoreTitle: {
+    fontSize: 15,
+    color: "#312e81",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  scoreValue: { fontSize: 30, fontWeight: "700", marginVertical: 6 },
   progressBar: {
-    height: 8,
-    borderRadius: 6,
-    backgroundColor: "#eef2f7",
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: "rgba(15,23,42,0.15)",
     overflow: "hidden",
     marginVertical: 8,
   },
-  progressFill: { height: "100%", borderRadius: 6 },
+  progressFill: { height: "100%", borderRadius: 999 },
   scoreDescription: {
-    opacity: 0.9,
     fontSize: 13,
-    lineHeight: 18,
-    color: "#374151",
+    color: "#0f172a",
+    opacity: 0.85,
   },
-  scoreTapHint: { marginTop: 6, fontSize: 12, color: "#6b7280", opacity: 0.9 },
+  scoreTapHint: {
+    marginTop: 6,
+    fontSize: 12,
+    color: "#475569",
+  },
   sectionDivider: {
     height: 1,
-    backgroundColor: "#f3f4f6",
-    marginVertical: 14,
-    marginHorizontal: 20,
+    backgroundColor: "rgba(148,163,184,0.25)",
   },
-  sectionHeader: { marginTop: 10, paddingHorizontal: 20 },
+  sectionHeaderRow: {
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    paddingHorizontal: 4,
+  },
+  sectionHeader: {
+    fontSize: 20,
+  },
   resultsMeta: {
     fontSize: 12,
-    color: "#6b7280",
-    marginBottom: 4,
-    paddingHorizontal: 20,
+    color: "#64748b",
   },
   loadingContainer: {
-    padding: 16,
+    paddingVertical: 16,
     alignItems: "center",
-    justifyContent: "center",
   },
-  loadingText: { fontSize: 16, opacity: 0.7 },
+  loadingText: { fontSize: 15, color: "#475569" },
+  emptyState: {
+    padding: 24,
+    alignItems: "center",
+    gap: 10,
+  },
+  emptyStateText: {
+    opacity: 0.8,
+    fontSize: 15,
+  },
+  resetBtn: {
+    backgroundColor: "#1d4ed8",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 999,
+  },
+  resetBtnText: {
+    color: "white",
+    fontWeight: "600",
+  },
   optionCard: {
-    padding: 16,
-    borderRadius: 14,
-    backgroundColor: "#ffffff",
-    marginVertical: 8,
+    padding: 18,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    marginVertical: 10,
     marginHorizontal: 20,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: "rgba(148,163,184,0.25)",
   },
   cardElevated: {
-    shadowColor: "#000",
+    shadowColor: "#0f172a",
     shadowOpacity: 0.08,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
   },
-  cardPressed: { transform: [{ scale: 0.997 }], opacity: 0.98 },
   cardRow: { flexDirection: "row", alignItems: "center" },
-  leading: { marginRight: 12 },
+  leading: { marginRight: 14 },
   leadingIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "rgba(15,23,42,0.06)",
   },
   leadingEmoji: { fontSize: 18 },
   middle: { flex: 1 },
@@ -1031,7 +1077,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 17,
     fontWeight: "600",
-    color: "#1f2937",
+    color: "#0f172a",
   },
   distancePill: {
     marginLeft: 8,
@@ -1039,12 +1085,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 999,
-    backgroundColor: "#e0f2fe",
-    color: "#0369a1",
+    backgroundColor: "rgba(59,130,246,0.12)",
+    color: "#1d4ed8",
     fontWeight: "600",
   },
   subRow: {
-    marginTop: 4,
+    marginTop: 6,
     marginBottom: 2,
     flexDirection: "row",
     alignItems: "center",
@@ -1055,18 +1101,18 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "#a3a3a3",
+    backgroundColor: "#94a3b8",
     marginRight: 6,
   },
-  subtleText: { fontSize: 12, color: "#6b7280" },
+  subtleText: { fontSize: 12, color: "#64748b" },
   snapPill: {
     marginLeft: 6,
-    paddingHorizontal: 6,
+    paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
-    backgroundColor: "#e6f7eb",
+    borderRadius: 10,
+    backgroundColor: "rgba(22,101,52,0.08)",
     borderWidth: 1,
-    borderColor: "#bfe5ca",
+    borderColor: "rgba(22,101,52,0.2)",
     alignSelf: "flex-start",
   },
   snapPillText: {
@@ -1077,16 +1123,16 @@ const styles = StyleSheet.create({
   },
   pricePill: {
     marginLeft: 6,
-    paddingHorizontal: 6,
+    paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
-    backgroundColor: "#eef2ff",
+    borderRadius: 10,
+    backgroundColor: "rgba(99,102,241,0.12)",
     borderWidth: 1,
-    borderColor: "#dcd7fe",
+    borderColor: "rgba(99,102,241,0.25)",
     alignSelf: "flex-start",
   },
   pricePillText: {
-    color: "#3730a3",
+    color: "#4338ca",
     fontSize: 11,
     fontWeight: "700",
     letterSpacing: 0.3,
@@ -1096,7 +1142,7 @@ const styles = StyleSheet.create({
   optionAddress: {
     flex: 1,
     fontSize: 13,
-    color: "#4b5563",
+    color: "#475569",
   },
   chevronButton: {
     marginLeft: 8,
@@ -1104,32 +1150,25 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   chevron: {
-    color: "#9ca3af",
+    color: "#94a3b8",
     fontWeight: "700",
     fontSize: 18,
     lineHeight: 18,
   },
-  resetBtn: {
-    backgroundColor: "#1a73e8",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-  },
-  // Expanded panel styles
   expandedContent: {
     marginTop: 8,
-    paddingTop: 8,
+    paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: "#f3f4f6",
+    borderTopColor: "rgba(148,163,184,0.25)",
   },
   smallBtn: {
-    backgroundColor: "#1a73e8",
-    paddingHorizontal: 12,
+    backgroundColor: "#1d4ed8",
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 10,
+    borderRadius: 12,
   },
   smallBtnOutline: {
-    backgroundColor: "#eef2f7",
+    backgroundColor: "rgba(15,23,42,0.06)",
     marginLeft: 8,
   },
 });

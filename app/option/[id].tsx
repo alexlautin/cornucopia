@@ -1,14 +1,23 @@
-import { useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Alert, Clipboard, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
+import { useLocalSearchParams } from "expo-router";
+import { useEffect, useState } from "react";
+import {
+  Alert,
+  Clipboard,
+  Pressable,
+  ScrollView,
+  Share,
+  StyleSheet,
+  View,
+} from "react-native";
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { setForcedColorScheme } from '@/hooks/use-theme-color';
-import { openNavigation, showNavigationOptions } from '@/utils/navigation';
-import { getOpeningHours } from '@/utils/osm-api';
+import { AppBackground } from "@/components/app-background";
+import { ThemedText } from "@/components/themed-text";
+import { ThemedView } from "@/components/themed-view";
+import { setForcedColorScheme } from "@/hooks/use-theme-color";
+import { openNavigation, showNavigationOptions } from "@/utils/navigation";
+import { getOpeningHours } from "@/utils/osm-api";
 
 export default function OptionDetailsScreen() {
   const params = useLocalSearchParams<{
@@ -23,15 +32,18 @@ export default function OptionDetailsScreen() {
     price?: string;
   }>();
 
-  const name = params.name ?? 'Location';
-  const type = params.type ?? '—';
-  const address = params.address ?? 'Address not available';
+  const name = params.name ?? "Location";
+  const type = params.type ?? "—";
+  const address = params.address ?? "Address not available";
   const distance = params.distance;
   const latitude = params.latitude ? parseFloat(params.latitude) : undefined;
   const longitude = params.longitude ? parseFloat(params.longitude) : undefined;
-  const snap = params.snap === 'true';
-  const priceLevel = params.price ? Math.max(1, Math.min(3, parseInt(params.price, 10))) : undefined;
-  const isOSMData = params.id?.startsWith('osm-') || (params.id && params.id.length > 10);
+  const snap = params.snap === "true";
+  const priceLevel = params.price
+    ? Math.max(1, Math.min(3, parseInt(params.price, 10)))
+    : undefined;
+  const isOSMData =
+    params.id?.startsWith("osm-") || (params.id && params.id.length > 10);
 
   // Declare state hooks first (stable order)
   const [hours, setHours] = useState<string[] | null>(null);
@@ -57,7 +69,7 @@ export default function OptionDetailsScreen() {
           const parsed = JSON.parse(v);
           setIsFavorite(Boolean(parsed && parsed.id));
         } catch {
-          setIsFavorite(v === '1');
+          setIsFavorite(v === "1");
         }
       } catch {
         // noop
@@ -71,7 +83,7 @@ export default function OptionDetailsScreen() {
 
   const toggleFavorite = async () => {
     if (!params.id) {
-      Alert.alert('Unable to save', 'Missing place id');
+      Alert.alert("Unable to save", "Missing place id");
       return;
     }
     const key = `fav_${params.id}`;
@@ -79,7 +91,7 @@ export default function OptionDetailsScreen() {
       if (isFavorite) {
         await AsyncStorage.removeItem(key);
         setIsFavorite(false);
-        Alert.alert('Removed', 'This place was removed from your saved list.');
+        Alert.alert("Removed", "This place was removed from your saved list.");
       } else {
         // Save compact metadata to show in the list later
         const payload = {
@@ -93,17 +105,17 @@ export default function OptionDetailsScreen() {
         };
         await AsyncStorage.setItem(key, JSON.stringify(payload));
         setIsFavorite(true);
-        Alert.alert('Saved', 'This place was added to your saved list.');
+        Alert.alert("Saved", "This place was added to your saved list.");
       }
     } catch (e) {
-      console.error('toggleFavorite error', e);
-      Alert.alert('Error', 'Failed to update favorites.');
+      console.error("toggleFavorite error", e);
+      Alert.alert("Error", "Failed to update favorites.");
     }
   };
 
   // Force light mode while this description/details page is active and mounted
   useEffect(() => {
-    setForcedColorScheme('light');
+    setForcedColorScheme("light");
     return () => setForcedColorScheme(undefined);
   }, []);
 
@@ -132,9 +144,9 @@ export default function OptionDetailsScreen() {
     if (type) parts.push(`Type: ${type}`);
     if (distance) parts.push(`Distance: ${distance}`);
     if (address) parts.push(`Address: ${address}`);
-    if (hours && hours.length > 0) parts.push(`Hours: ${hours.join('; ')}`);
-    parts.push('', 'Found with Cornucopia');
-    return parts.join('\n');
+    if (hours && hours.length > 0) parts.push(`Hours: ${hours.join("; ")}`);
+    parts.push("", "Found with Cornucopia");
+    return parts.join("\n");
   };
 
   // --- New: share handler with dynamic clipboard fallback ---
@@ -146,18 +158,24 @@ export default function OptionDetailsScreen() {
     } catch {
       try {
         Clipboard.setString(summary);
-        Alert.alert('Copied to clipboard', 'Share sheet failed — details copied to clipboard.');
+        Alert.alert(
+          "Copied to clipboard",
+          "Share sheet failed — details copied to clipboard."
+        );
         return;
       } catch {
         // ignore
       }
 
       Alert.alert(
-        'Share failed',
+        "Share failed",
         'Unable to open share sheet or copy to clipboard. Tap "Show" to view the summary and copy it manually.',
         [
-          { text: 'Show', onPress: () => Alert.alert('Place summary', summary) },
-          { text: 'OK', style: 'cancel' },
+          {
+            text: "Show",
+            onPress: () => Alert.alert("Place summary", summary),
+          },
+          { text: "OK", style: "cancel" },
         ]
       );
     }
@@ -190,43 +208,73 @@ export default function OptionDetailsScreen() {
   // Determine whether there is a usable human-readable address to display.
   const hasUsableAddress = Boolean(
     address &&
-      address !== 'Address not available' &&
+      address !== "Address not available" &&
       // treat plain coordinate fallback (e.g. "33.76760, -84.39080") as not usable text
       !/^\s*-?\d+\.\d+,\s*-?\d+\.\d+\s*$/.test(address)
   );
 
   return (
-    <ThemedView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-          <View style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
-            <ThemedText type="title" style={styles.title}>{name}</ThemedText>
+    <AppBackground>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+      >
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+          }}
+        >
+          <View style={{ flexDirection: "column", alignItems: "flex-start" }}>
+            <ThemedText type="title" style={styles.title}>
+              {name}
+            </ThemedText>
             <View style={styles.headerActionsRow}>
               <Pressable
                 onPress={toggleFavorite}
-                style={({ pressed }) => [styles.headerSaveBtnBelow, isFavorite && styles.headerFavorited, pressed && { opacity: 0.85 }]}
+                style={({ pressed }) => [
+                  styles.headerSaveBtnBelow,
+                  isFavorite && styles.headerFavorited,
+                  pressed && { opacity: 0.85 },
+                ]}
               >
-                <ThemedText style={[styles.headerActionText, isFavorite && styles.headerFavoritedText]}>
-                  {isFavorite ? 'Saved' : 'Save'}
+                <ThemedText
+                  style={[
+                    styles.headerActionText,
+                    isFavorite && styles.headerFavoritedText,
+                  ]}
+                >
+                  {isFavorite ? "Saved" : "Save"}
                 </ThemedText>
               </Pressable>
 
               <Pressable
                 onPress={handleSharePlace}
-                style={({ pressed }) => [styles.headerShareBtnBelow, pressed && { opacity: 0.85 }]}
+                style={({ pressed }) => [
+                  styles.headerShareBtnBelow,
+                  pressed && { opacity: 0.85 },
+                ]}
               >
-                <ThemedText style={styles.headerActionText}>Share</ThemedText>
+                <ThemedText
+                  style={[
+                    styles.headerActionText,
+                    styles.headerActionGhostText,
+                  ]}
+                >
+                  Share
+                </ThemedText>
               </Pressable>
             </View>
           </View>
         </View>
-        
+
         <View style={styles.metaContainer}>
           {distance ? (
             <ThemedText style={styles.distance}>{distance}</ThemedText>
           ) : null}
         </View>
-        
+
         <View style={styles.labelContainer}>
           <View style={styles.typeLabel}>
             <ThemedText style={styles.typeLabelText}>{type}</ThemedText>
@@ -238,7 +286,9 @@ export default function OptionDetailsScreen() {
           ) : null}
           {priceLevel ? (
             <View style={styles.priceLabel}>
-              <ThemedText style={styles.priceLabelText}>{'$'.repeat(priceLevel)}</ThemedText>
+              <ThemedText style={styles.priceLabelText}>
+                {"$".repeat(priceLevel)}
+              </ThemedText>
             </View>
           ) : null}
         </View>
@@ -251,19 +301,33 @@ export default function OptionDetailsScreen() {
             <>
               <ThemedText>{address}</ThemedText>
               {canNavigate && (
-                <Pressable style={styles.addressNavButton} onPress={handleQuickNavigation}>
-                  <ThemedText style={styles.addressNavText}>Navigate →</ThemedText>
+                <Pressable
+                  style={styles.addressNavButton}
+                  onPress={handleQuickNavigation}
+                >
+                  <ThemedText style={styles.addressNavText}>
+                    Navigate →
+                  </ThemedText>
                 </Pressable>
               )}
             </>
           ) : canNavigate ? (
             // Compact UI when address text is not available: only show a single Navigate action.
-            <Pressable style={[styles.addressNavButton, styles.addressOnlyButton]} onPress={handleQuickNavigation}>
-              <ThemedText style={[styles.addressNavText, styles.addressOnlyText]}>Navigate →</ThemedText>
+            <Pressable
+              style={[styles.addressNavButton, styles.addressOnlyButton]}
+              onPress={handleQuickNavigation}
+            >
+              <ThemedText
+                style={[styles.addressNavText, styles.addressOnlyText]}
+              >
+                Navigate →
+              </ThemedText>
             </Pressable>
           ) : (
             // No address and cannot navigate: show a subtle fallback message without big whitespace.
-            <ThemedText style={{ opacity: 0.7 }}>Address not available</ThemedText>
+            <ThemedText style={{ opacity: 0.7 }}>
+              Address not available
+            </ThemedText>
           )}
         </ThemedView>
 
@@ -301,175 +365,184 @@ export default function OptionDetailsScreen() {
           {distance ? <ThemedText>• Distance: {distance}</ThemedText> : null}
         </ThemedView>
       </ScrollView>
-    </ThemedView>
+    </AppBackground>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    padding: 20,
-    gap: 16,
-    paddingTop: 24,
+    padding: 24,
+    gap: 18,
+    paddingBottom: 120,
   },
   title: {
     marginBottom: 4,
+    fontSize: 30,
+    fontWeight: "700",
   },
   metaContainer: {
     marginBottom: 4,
   },
   distance: {
-    opacity: 0.7,
-    fontSize: 16,
+    opacity: 0.8,
+    fontSize: 15,
+    color: "#475569",
   },
   labelContainer: {
-    flexDirection: 'row',
+    flexDirection: "row",
     marginBottom: 8,
-    alignItems: 'center',
+    alignItems: "center",
   },
   typeLabel: {
-    backgroundColor: '#2563eb',
+    backgroundColor: "rgba(37,99,235,0.15)",
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 16,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(37,99,235,0.35)",
   },
   typeLabelText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
+    color: "#1d4ed8",
+    fontSize: 13,
+    fontWeight: "600",
   },
   snapLabel: {
     marginLeft: 6,
-    backgroundColor: '#e6f7eb',
+    backgroundColor: "#e6f7eb",
     paddingHorizontal: 6, // tighter horizontal padding
-    paddingVertical: 3,   // tighter vertical padding
-    borderRadius: 12,     // slightly smaller radius
+    paddingVertical: 3, // tighter vertical padding
+    borderRadius: 12, // slightly smaller radius
     borderWidth: 1,
-    borderColor: '#bfe5ca',
-    alignSelf: 'flex-start',
+    borderColor: "#bfe5ca",
+    alignSelf: "flex-start",
     flexShrink: 1,
     minWidth: 0,
   },
-    priceLabel: {
-      marginLeft: 6,
-      backgroundColor: '#eef2ff',
-      paddingHorizontal: 6,
-      paddingVertical: 3,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: '#dcd7fe',
-      alignSelf: 'flex-start',
-      flexShrink: 1,
-      minWidth: 0,
-    },
-    priceLabelText: {
-      color: '#3730a3',
-      fontSize: 11,
-      fontWeight: '700',
-      letterSpacing: 0.3,
-      lineHeight: 14,
-    },
+  priceLabel: {
+    marginLeft: 6,
+    backgroundColor: "#eef2ff",
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#dcd7fe",
+    alignSelf: "flex-start",
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  priceLabelText: {
+    color: "#4338ca",
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.3,
+    lineHeight: 14,
+  },
   snapLabelText: {
-    color: '#166534',
+    color: "#166534",
     fontSize: 11, // smaller font to reduce width
-    fontWeight: '700',
+    fontWeight: "700",
     letterSpacing: 0.3,
     lineHeight: 14,
   },
   card: {
-    padding: 16,
-    borderRadius: 12,
+    padding: 18,
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#e5e5e5',
-    gap: 6,
-    marginVertical: 12, // added: space between stacked cards
-    paddingVertical: 12, // slightly more vertical padding for breathing room
+    borderColor: "rgba(148,163,184,0.25)",
+    backgroundColor: "rgba(255,255,255,0.95)",
+    gap: 10,
+    marginVertical: 10,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
   },
   addressNavButton: {
-    alignSelf: 'flex-start',
+    alignSelf: "flex-start",
     marginTop: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#eff6ff',
-    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: "#dbeafe",
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#dbeafe',
+    borderColor: "#93c5fd",
   },
   addressNavText: {
-    color: '#2563eb',
+    color: "#2563eb",
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   // Compact variant when no address text is available (removes extra spacing/visual weight).
   addressOnlyButton: {
     marginTop: 0,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    backgroundColor: '#2563eb',
-    borderColor: '#2563eb',
+    backgroundColor: "#2563eb",
+    borderColor: "#2563eb",
   },
   addressOnlyText: {
-    color: '#ffffff',
-    fontWeight: '700',
+    color: "#ffffff",
+    fontWeight: "700",
   },
   headerShareBtn: {
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: '#eef6ff',
+    backgroundColor: "#eef6ff",
     borderWidth: 1,
-    borderColor: '#dbeafe',
-    alignSelf: 'flex-start',
+    borderColor: "#dbeafe",
+    alignSelf: "flex-start",
   },
   headerShareText: {
-    color: '#1a73e8',
-    fontWeight: '700',
+    color: "#1a73e8",
+    fontWeight: "700",
   },
   // Row for inline action buttons under the title; ensures vertical centering
   headerActionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginTop: 6,
   },
   // Matched action button styles so Save and Share render exactly the same height
   headerSaveBtnBelow: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#eef6ff',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: "#1d4ed8",
     borderWidth: 1,
-    borderColor: '#dbeafe',
-    minHeight: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: "#1e3a8a",
+    minHeight: 40,
+    alignItems: "center",
+    justifyContent: "center",
   },
   headerShareBtnBelow: {
     marginLeft: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#eef6ff',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: "rgba(15,23,42,0.06)",
     borderWidth: 1,
-    borderColor: '#dbeafe',
-    minHeight: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: "rgba(148,163,184,0.3)",
+    minHeight: 40,
+    alignItems: "center",
+    justifyContent: "center",
   },
   // Shared text style for header actions to keep typography identical
   headerActionText: {
-    color: '#1a73e8',
-    fontWeight: '700',
+    color: "#ffffff",
+    fontWeight: "700",
     fontSize: 14,
     lineHeight: 18,
   },
+  headerActionGhostText: {
+    color: "#0f172a",
+  },
   headerFavorited: {
-    backgroundColor: '#1a73e8',
-    borderColor: '#174ea6',
+    backgroundColor: "#1d4ed8",
+    borderColor: "#1e3a8a",
   },
   headerFavoritedText: {
-    color: '#ffffff',
-  },
-  scrollContent: {
-    paddingBottom: 40,
+    color: "#ffffff",
   },
 });
