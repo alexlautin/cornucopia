@@ -387,19 +387,21 @@ export default function TabTwoScreen() {
             >
               <View style={styles.calloutContainer}>
                 <ThemedText style={styles.calloutTitle}>{location.name}</ThemedText>
-                <View style={styles.calloutBadge}>
-                  <ThemedText style={styles.calloutBadgeText}>{location.type}</ThemedText>
+                <View style={styles.calloutBadgesRow}>
+                  <View style={styles.calloutBadge}>
+                    <ThemedText style={styles.calloutBadgeText}>{location.type}</ThemedText>
+                  </View>
+                  {location.snap ? (
+                    <View style={[styles.calloutBadge, { backgroundColor: '#e6f7eb' }]}> 
+                      <ThemedText style={[styles.calloutBadgeText, { color: '#166534' }]}>SNAP</ThemedText>
+                    </View>
+                  ) : null}
+                  {location.priceLevel ? (
+                    <View style={[styles.calloutBadge, { backgroundColor: '#eef2ff' }]}> 
+                      <ThemedText style={[styles.calloutBadgeText, { color: '#3730a3' }]}>{'$'.repeat(location.priceLevel)}</ThemedText>
+                    </View>
+                  ) : null}
                 </View>
-                {location.snap ? (
-                  <View style={[styles.calloutBadge, { backgroundColor: '#e6f7eb' }]}> 
-                    <ThemedText style={[styles.calloutBadgeText, { color: '#166534' }]}>SNAP</ThemedText>
-                  </View>
-                ) : null}
-                {location.priceLevel ? (
-                  <View style={[styles.calloutBadge, { backgroundColor: '#eef2ff' }]}> 
-                    <ThemedText style={[styles.calloutBadgeText, { color: '#3730a3' }]}>{'$'.repeat(location.priceLevel)}</ThemedText>
-                  </View>
-                ) : null}
                 {location.distance && (
                   <ThemedText style={styles.calloutDistance}>{location.distance}</ThemedText>
                 )}
@@ -536,6 +538,12 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     color: '#1f2937',
   },
+  calloutBadgesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginBottom: 4,
+  },
   calloutBadge: {
     backgroundColor: '#e0f2fe',
     paddingHorizontal: 10,
@@ -543,6 +551,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignSelf: 'flex-start',
     marginBottom: 4,
+    marginRight: 6,
   },
   calloutBadgeText: {
     color: '#0369a1',

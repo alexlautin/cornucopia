@@ -723,8 +723,8 @@ const styles = StyleSheet.create({
     color: '#0369a1',
     fontWeight: '600'
   },
-  subRow: { marginTop: 4, marginBottom: 2 },
-  metaRow: { flexDirection: 'row', alignItems: 'center' },
+  subRow: { marginTop: 4, marginBottom: 2, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
+  metaRow: { flexDirection: 'row', alignItems: 'center', marginRight: 6 },
   metaDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#a3a3a3', marginRight: 6 },
   subtleText: { fontSize: 12, color: '#6b7280' },
   snapPill: {
