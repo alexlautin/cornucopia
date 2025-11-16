@@ -485,9 +485,6 @@ export default function HomeScreen() {
             pressed && styles.heroLinkPressed,
           ]}
         >
-          <ThemedText style={styles.heroLinkText}>
-            Learn how we grade walkability →
-          </ThemedText>
         </Pressable>
       </View>
 
@@ -626,7 +623,7 @@ export default function HomeScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[
             styles.listContent,
-            { paddingTop: Math.max(insets.top) },
+            { paddingTop: Math.max(insets.top - 40) }, // Reduced padding
           ]}
           contentInsetAdjustmentBehavior="always"
           ListHeaderComponent={listHeader}
@@ -858,12 +855,12 @@ const styles = StyleSheet.create({
   listHeader: {
     paddingHorizontal: 20,
     paddingBottom: 16,
-    paddingTop: 4,
-    gap: 20,
+    paddingTop: -8, // Reduced from 4 to move content higher
+    gap: 8, // Reduced from 12 to bring sections even closer
   },
   hero: {
-    paddingTop: 0,
-    gap: 12,
+    paddingTop: -12, // Reduced from 0 to move title higher
+    gap: 4, // Reduced from 8 for tighter spacing between title and subtitle
   },
   heroBadge: {
     alignSelf: "flex-start",
@@ -885,7 +882,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.3,
     color: "#0f172a",
-    marginTop: 0,
+    marginTop: -8, // Added negative margin to move title up
   },
   subtitle: {
     fontSize: 16,
