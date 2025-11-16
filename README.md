@@ -1,50 +1,85 @@
-# Welcome to your Expo app 👋
+# Cornucopia — Food Finder
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+An Expo (React Native) app to find nearby food assistance using OpenStreetMap, with extras like walkability scoring, favorites, and events.
 
-## Get started
+## Environment variables
 
-1. Install dependencies
+Create a `.env` (or use EAS secrets) with:
 
-   ```bash
-   npm install
-   ```
+- EXPO_PUBLIC_SUPABASE_URL
+- EXPO_PUBLIC_SUPABASE_ANON_KEY
+- EXPO_PUBLIC_GOOGLE_PLACES_API_KEY (optional; used by utils/places-api.ts)
 
-2. Start the app
+Notes:
+- Supabase is initialized in `lib/supabase.ts` using EXPO_PUBLIC_ vars.
 
-   ```bash
-   npx expo start
-   ```
+## Development
 
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+Install dependencies:
 
 ```bash
-npm run reset-project
+npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Start the app:
 
-## Learn more
+```bash
+npx expo start
+# or
+npm run start
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+Open the app:
+- iOS simulator: press i
+- Android emulator: press a
+- Web: npm run web
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Run native projects:
 
-## Join the community
+```bash
+npm run ios
+npm run android
+```
 
-Join our community of developers creating universal apps.
+## Project structure
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- app/ — Expo Router routes (screens, stacks, tabs)
+- app/(tabs)/ — Bottom tab screens (Home, Map, Events, Eligibility, Favorites)
+- app/option/[id].tsx — Location description/details page
+- app/walkability.tsx — Food Walkability explanation
+- components/ — Themed primitives and UI
+- constants/ — Theme, rules, assets config
+- lib/ — Supabase client setup
+- utils/ — OSM API, navigation helpers, distance, cache
+- ios/ and android/ — Native projects (generated/managed by Expo)
+
+## Scripts
+
+- start: expo start
+- ios: expo run:ios
+- android: expo run:android
+- web: expo start --web
+- reset-project: node ./scripts/reset-project.js
+- lint: expo lint
+
+## Deployment
+
+Using EAS:
+```bash
+npm install -g eas-cli
+eas login
+eas build -p ios   # or -p android
+eas submit -p ios  # or -p android
+```
+
+Notes:
+- Location permission strings are configured in app.json (iOS and Android).
+- App icons and splash are configured in app.json and ios asset catalogs.
+
+## License
+
+MIT
+
+## Authors
+
+Made by Alex Lautin, Andy Blumberg, and Jake Floch
