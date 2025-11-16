@@ -277,14 +277,14 @@ export default function OptionDetailsScreen() {
           )}
         </ThemedView>
 
-        <ThemedView style={styles.card}>
+        {/* <ThemedView style={styles.card}>
           <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
             About
           </ThemedText>
           <ThemedText>
             Fresh, accessible food option in your area. More detailed information and hours coming soon.
           </ThemedText>
-        </ThemedView>
+        </ThemedView> */}
 
         <ThemedView style={styles.card}>
           <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
