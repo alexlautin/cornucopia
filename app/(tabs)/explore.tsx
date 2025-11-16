@@ -1,13 +1,8 @@
 import * as Location from "expo-location";
 import { router, useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
-import MapView, {
-  Callout,
-  Marker,
-  PROVIDER_DEFAULT,
-  type Region,
-} from "react-native-maps";
+import MapView, { Callout, Marker, PROVIDER_DEFAULT } from "react-native-maps";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
@@ -17,7 +12,6 @@ import {
   categorizePlace,
   formatOSMAddress,
   getAllPlacesOnce,
-  onOSMCacheCleared,
 } from "@/utils/osm-api";
 
 const DEBUG =
@@ -29,19 +23,6 @@ const dlog = (...args: any[]) => {
   if (DEBUG) console.log("EXPLORE:", ...args);
 };
 
-const DEFAULT_REGION: Region = {
-  latitude: 33.7676,
-  longitude: -84.3908,
-  latitudeDelta: 0.05,
-  longitudeDelta: 0.05,
-};
-const MAX_DATASET = 2500;
-const MAX_MARKERS = 2300;
-const MAX_RADIUS_MILES = 40;
-const STALE_MS = 5 * 60 * 1000;
-const REGION_DEBOUNCE_MS = 10;
-const MARKER_BATCH_SIZE = 60;
-
 export default function TabTwoScreen() {
   const [locations, setLocations] = useState<FoodLocation[]>(foodLocations);
   const [loading, setLoading] = useState(true);
@@ -52,19 +33,11 @@ export default function TabTwoScreen() {
   const [centeringLocation, setCenteringLocation] = useState(false);
   const [userHasMovedMap, setUserHasMovedMap] = useState(false);
   const [trackMarkerUpdates, setTrackMarkerUpdates] = useState(true);
-  const [displayedMarkers, setDisplayedMarkers] = useState<FoodLocation[]>([]);
-  const lastLoadedRef = useRef<number>(0);
   const hasLoadedRef = useRef<boolean>(false);
   const mapRef = useRef<MapView | null>(null);
 
-  // Track visible region to fetch what's in the field of view
-  const [visibleRegion, setVisibleRegion] = useState<Region>(DEFAULT_REGION);
-  // Track last request key to avoid duplicate fetches/logs for same center
-  const lastRequestKeyRef = useRef<string | null>(null);
-  const lastRequestTsRef = useRef<number>(0);
   // Prevent overlapping fetches that would all force on initial load
   const isFetchingRef = useRef<boolean>(false);
-  const regionDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Get user location immediately on mount
   const getUserLocation = useCallback(async () => {
@@ -146,152 +119,103 @@ export default function TabTwoScreen() {
     };
   }, [getUserLocation, userHasMovedMap]);
 
-  // Accept an optional center/region so results match the visible map area.
-  const loadLocations = useCallback(
-    async (opts?: { force?: boolean }) => {
-      const isStale = Date.now() - lastLoadedRef.current > STALE_MS;
-      // If caller didn't force and we've loaded recently, short-circuit.
-      if (!opts?.force && hasLoadedRef.current && !isStale) return;
+  const loadLocations = useCallback(async () => {
+    if (hasLoadedRef.current || isFetchingRef.current) return;
 
-      // show spinner for first load or when forcing and we have no data
-      if ((!hasLoadedRef.current || opts?.force) && locations.length === 0)
-        setLoading(true);
+    isFetchingRef.current = true;
+    setLoading(true);
 
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== "granted") {
-          setLoading(false);
-          return;
-        }
-        const location = await Location.getCurrentPositionAsync({});
-        const centerLat = location.coords.latitude;
-        const centerLon = location.coords.longitude;
-        if (!userLocation) {
-          setUserLocation({ latitude: centerLat, longitude: centerLon });
-        }
-
-        // Deduplicate same-center requests in quick succession (e.g., focus + initial region events)
-        const reqKey = `${centerLat.toFixed(4)}_${centerLon.toFixed(4)}`;
-        const now = Date.now();
-        const RECENT_MS = 1200;
-        if (
-          lastRequestKeyRef.current === reqKey &&
-          now - lastRequestTsRef.current < RECENT_MS
-        ) {
-          // Skip duplicate request for the same coarse center within a short window
-          return;
-        }
-        lastRequestKeyRef.current = reqKey;
-        lastRequestTsRef.current = now;
-
-        if (isFetchingRef.current) {
-          dlog("load.skip.inflight", { centerLat, centerLon });
-          return;
-        }
-        isFetchingRef.current = true;
-        dlog("load.start", { centerLat, centerLon, force: !!opts?.force });
-        // Fetch global data once (memory cache), avoid repeated network calls
-        const t0 = Date.now();
-        const osmPlaces = await getAllPlacesOnce(
-          opts?.force ? { force: true } : undefined
-        );
-        const t1 = Date.now();
-        dlog("load.fetch.done", { count: osmPlaces.length, fetchMs: t1 - t0 });
-
-        if (osmPlaces && osmPlaces.length > 0) {
-          const m0 = Date.now();
-          type RankedLocation = {
-            location: FoodLocation;
-            distanceValue: number;
-          };
-          const rankedLocations: RankedLocation[] = osmPlaces.map(
-            (place, index) => {
-              const lat = parseFloat(place.lat ?? "0");
-              const lon = parseFloat(place.lon ?? "0");
-              const distMiles = getDistance(centerLat, centerLon, lat, lon);
-              const pl =
-                (place as any).price_level &&
-                Number.isFinite((place as any).price_level)
-                  ? Math.max(
-                      1,
-                      Math.min(3, Math.round((place as any).price_level))
-                    )
-                  : undefined;
-              return {
-                distanceValue: distMiles,
-                location: {
-                  id: place.place_id || `osm-${index}`,
-                  name: place.display_name.split(",")[0],
-                  address: formatOSMAddress(place),
-                  type: categorizePlace(place),
-                  coordinate: { latitude: lat, longitude: lon },
-                  distance: formatDistance(distMiles),
-                  snap: Boolean((place as any).snap),
-                  priceLevel: pl as 1 | 2 | 3 | undefined,
-                },
-              };
-            }
-          );
-          rankedLocations.sort((a, b) => a.distanceValue - b.distanceValue);
-          const nearby = rankedLocations.filter(
-            (entry) => entry.distanceValue <= MAX_RADIUS_MILES
-          );
-          const source = nearby.length > 0 ? nearby : rankedLocations;
-          const limitedLocations = source
-            .slice(0, MAX_DATASET)
-            .map((entry) => entry.location);
-          dlog("load.map.done", {
-            mapMs: Date.now() - m0,
-            count: limitedLocations.length,
-          });
-          // Enable tracking just for the next paint, then disable to reduce churn
-          setTrackMarkerUpdates(true);
-          setLocations(limitedLocations);
-          dlog("load.setLocations", {
-            count: limitedLocations.length,
-            totalMs: Date.now() - t0,
-          });
-          setTimeout(() => setTrackMarkerUpdates(false), 600);
-        } else {
-          // fallback: compute distances for static list relative to center
-          const withDistances = foodLocations.map((loc) => ({
-            ...loc,
-            calculatedDistance: getDistance(
-              centerLat,
-              centerLon,
-              loc.coordinate.latitude,
-              loc.coordinate.longitude
-            ),
-          }));
-          const sortedByDistance = withDistances.sort(
-            (a, b) => a.calculatedDistance - b.calculatedDistance
-          );
-          const nearbyFallback = sortedByDistance.filter(
-            (loc) => loc.calculatedDistance <= MAX_RADIUS_MILES
-          );
-          const sourceFallback =
-            nearbyFallback.length > 0 ? nearbyFallback : sortedByDistance;
-          const limitedFallback = sourceFallback.slice(0, MAX_DATASET);
-          setTrackMarkerUpdates(true);
-          setLocations(
-            limitedFallback.map((loc) => ({
-              ...loc,
-              distance: formatDistance(loc.calculatedDistance),
-            }))
-          );
-          setTimeout(() => setTrackMarkerUpdates(false), 600);
-        }
-      } catch (error) {
-        console.error("Error loading locations:", error);
-      } finally {
-        isFetchingRef.current = false;
-        hasLoadedRef.current = true;
-        lastLoadedRef.current = Date.now();
-        setLoading(false);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        return;
       }
-    },
-    [locations.length, userLocation]
-  );
+
+      const location = await Location.getCurrentPositionAsync({});
+      const centerLat = location.coords.latitude;
+      const centerLon = location.coords.longitude;
+      const newLocation = {
+        latitude: centerLat,
+        longitude: centerLon,
+      };
+
+      setUserLocation(newLocation);
+
+      dlog("load.start", { centerLat, centerLon });
+      const t0 = Date.now();
+      const osmPlaces = await getAllPlacesOnce();
+      const t1 = Date.now();
+      dlog("load.fetch.done", { count: osmPlaces.length, fetchMs: t1 - t0 });
+
+      if (osmPlaces && osmPlaces.length > 0) {
+        const m0 = Date.now();
+        const mappedLocations: FoodLocation[] = osmPlaces.map(
+          (place, index) => {
+            const lat = parseFloat(place.lat ?? "0");
+            const lon = parseFloat(place.lon ?? "0");
+            const distMiles = getDistance(centerLat, centerLon, lat, lon);
+            const pl =
+              (place as any).price_level &&
+              Number.isFinite((place as any).price_level)
+                ? Math.max(
+                    1,
+                    Math.min(3, Math.round((place as any).price_level))
+                  )
+                : undefined;
+            return {
+              id: place.place_id || `osm-${index}`,
+              name: place.display_name.split(",")[0],
+              address: formatOSMAddress(place),
+              type: categorizePlace(place),
+              coordinate: { latitude: lat, longitude: lon },
+              distance: formatDistance(distMiles),
+              snap: Boolean((place as any).snap),
+              priceLevel: pl as 1 | 2 | 3 | undefined,
+            };
+          }
+        );
+        dlog("load.map.done", {
+          mapMs: Date.now() - m0,
+          count: mappedLocations.length,
+        });
+        setTrackMarkerUpdates(true);
+        setLocations(mappedLocations);
+        dlog("load.setLocations", {
+          count: mappedLocations.length,
+          totalMs: Date.now() - t0,
+        });
+        hasLoadedRef.current = true;
+        setTimeout(() => setTrackMarkerUpdates(false), 600);
+      } else {
+        const withDistances = foodLocations.map((loc) => ({
+          ...loc,
+          calculatedDistance: getDistance(
+            centerLat,
+            centerLon,
+            loc.coordinate.latitude,
+            loc.coordinate.longitude
+          ),
+        }));
+        const sorted = withDistances.sort(
+          (a, b) => a.calculatedDistance - b.calculatedDistance
+        );
+        setTrackMarkerUpdates(true);
+        setLocations(
+          sorted.map((loc) => ({
+            ...loc,
+            distance: formatDistance(loc.calculatedDistance),
+          }))
+        );
+        hasLoadedRef.current = true;
+        setTimeout(() => setTrackMarkerUpdates(false), 600);
+      }
+    } catch (error) {
+      console.error("Error loading locations:", error);
+    } finally {
+      isFetchingRef.current = false;
+      setLoading(false);
+    }
+  }, []);
 
   const centerOnUserLocation = useCallback(async () => {
     if (centeringLocation) return;
@@ -327,26 +251,8 @@ export default function TabTwoScreen() {
   }, [centeringLocation]);
 
   // Handle when user manually moves the map
-  const handleRegionChangeComplete = useCallback((region: Region) => {
+  const handleRegionChangeComplete = useCallback(() => {
     setUserHasMovedMap(true);
-    if (regionDebounceRef.current) {
-      clearTimeout(regionDebounceRef.current);
-    }
-    regionDebounceRef.current = setTimeout(() => {
-      dlog("region.update", {
-        latitude: region.latitude.toFixed(4),
-        longitude: region.longitude.toFixed(4),
-      });
-      setVisibleRegion(region);
-    }, REGION_DEBOUNCE_MS);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (regionDebounceRef.current) {
-        clearTimeout(regionDebounceRef.current);
-      }
-    };
   }, []);
 
   useFocusEffect(
@@ -355,19 +261,6 @@ export default function TabTwoScreen() {
       void loadLocations();
     }, [loadLocations])
   );
-
-  useEffect(() => {
-    const unsubscribe = onOSMCacheCleared(() => {
-      setLocations([]);
-      setLoading(true);
-      hasLoadedRef.current = false;
-      lastLoadedRef.current = 0;
-      // reload for current visible region if available, otherwise device location
-      void loadLocations({ force: true });
-    });
-
-    return unsubscribe;
-  }, [loadLocations, visibleRegion]);
 
   // Center map: prefer user location, fallback to default Atlanta coordinates
   const mapRegion = userLocation || {
@@ -424,89 +317,11 @@ export default function TabTwoScreen() {
     return "#2563eb"; // default blue
   }, []);
 
-  // Only render markers within the current viewport (with small padding)
-  const markersInView = useMemo<FoodLocation[]>(() => {
-    const base = locations.slice(0, MAX_MARKERS);
-    if (!visibleRegion) return base;
-    const pad = 1.2;
-    const minLat =
-      visibleRegion.latitude - visibleRegion.latitudeDelta * pad * 0.5;
-    const maxLat =
-      visibleRegion.latitude + visibleRegion.latitudeDelta * pad * 0.5;
-    const minLon =
-      visibleRegion.longitude - visibleRegion.longitudeDelta * pad * 0.5;
-    const maxLon =
-      visibleRegion.longitude + visibleRegion.longitudeDelta * pad * 0.5;
-    const filtered = locations.filter((l) => {
-      const { latitude, longitude } = l.coordinate;
-      return (
-        latitude >= minLat &&
-        latitude <= maxLat &&
-        longitude >= minLon &&
-        longitude <= maxLon
-      );
-    });
-    if (filtered.length <= MAX_MARKERS) return filtered;
-
-    const centerLat = visibleRegion.latitude;
-    const centerLon = visibleRegion.longitude;
-    type MarkerDistance = { location: FoodLocation; distance: number };
-    const ranked: MarkerDistance[] = filtered.map((location) => ({
-      location,
-      distance: getDistance(
-        centerLat,
-        centerLon,
-        location.coordinate.latitude,
-        location.coordinate.longitude
-      ),
-    }));
-
-    ranked.sort((a, b) => a.distance - b.distance);
-    return ranked.slice(0, MAX_MARKERS).map((entry) => entry.location);
-  }, [locations, visibleRegion]);
-
-  useEffect(() => {
-    let isCancelled = false;
-    if (markersInView.length === 0) {
-      setDisplayedMarkers([]);
-      return () => {
-        isCancelled = true;
-      };
-    }
-
-    let nextCount = Math.min(
-      displayedMarkers.length || MARKER_BATCH_SIZE,
-      markersInView.length
-    );
-    const initialSlice = markersInView.slice(0, nextCount);
-    setDisplayedMarkers((prev) => {
-      if (prev.length === initialSlice.length) return prev;
-      return initialSlice;
-    });
-    const scheduleBatch = () => {
-      if (isCancelled) return;
-      nextCount = Math.min(markersInView.length, nextCount + MARKER_BATCH_SIZE);
-      setDisplayedMarkers(markersInView.slice(0, nextCount));
-      dlog("markers.batch", { nextCount, total: markersInView.length });
-      if (nextCount < markersInView.length) {
-        requestAnimationFrame(scheduleBatch);
-      }
-    };
-
-    requestAnimationFrame(scheduleBatch);
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [markersInView, displayedMarkers.length]);
-
-  const markerCountLabel = useMemo(() => {
-    if (loading) return "Loading nearby options...";
-    if (markersInView.length === 0) return "No options in view";
-    const capped = markersInView.length === MAX_MARKERS;
-    const suffix = capped ? " (showing closest)" : "";
-    return `${markersInView.length} food options nearby${suffix}`;
-  }, [loading, markersInView.length]);
+  const markerCountLabel = loading
+    ? "Loading nearby options..."
+    : locations.length === 0
+    ? "No options available"
+    : `${locations.length} food options nearby`;
 
   return (
     <View style={styles.container}>
@@ -524,7 +339,7 @@ export default function TabTwoScreen() {
         showsMyLocationButton
         showsCompass
       >
-        {displayedMarkers.map((location: FoodLocation) => (
+        {locations.map((location: FoodLocation) => (
           <Marker
             key={location.id}
             coordinate={location.coordinate}
