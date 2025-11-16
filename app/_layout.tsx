@@ -44,7 +44,6 @@ export default function RootLayout() {
             return {
               title: placeName ?? "Location",
               headerBackTitle: "",
-              headerBackTitleVisible: false,
               presentation: "card",
             };
           }}
@@ -55,7 +54,6 @@ export default function RootLayout() {
           options={{
             title: "Walkability",
             headerBackTitle: "",
-            headerBackTitleVisible: false,
             presentation: "card",
           }}
         />

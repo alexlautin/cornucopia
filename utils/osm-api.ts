@@ -12,6 +12,8 @@ export interface OSMPlace {
   type: string;
   snap?: boolean;
   price_level?: number;
+  // Distance in miles from the query center (precomputed for UI consumers)
+  distance?: number;
   address?: {
     road?: string;
     house_number?: string;
@@ -22,11 +24,25 @@ export interface OSMPlace {
   openingHours?: string[];
 }
 
+// Debug logging helper (enable with EXPO_PUBLIC_DEBUG_OSM=true/1)
+const DEBUG =
+  (typeof process !== "undefined" &&
+    (process.env.EXPO_PUBLIC_DEBUG_OSM === "1" ||
+      process.env.EXPO_PUBLIC_DEBUG_OSM === "true")) ||
+  false;
+const dlog = (...args: any[]) => {
+  if (DEBUG) console.log("OSM:", ...args);
+};
+
 // In-module caches and helpers
 const memoryCache = new Map<string, { data: OSMPlace[]; ts: number }>();
 const hoursMemoryCache = new Map<string, string[]>();
 const inflight = new Map<string, Promise<OSMPlace[]>>();
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+// Global full-dataset cache (single fetch, reused across tabs)
+let allPlacesCache: { data: OSMPlace[]; ts: number } | null = null;
+let allPlacesInflight: Promise<OSMPlace[]> | null = null;
 
 type SupabaseOSMRecord = {
   place_id: string;
@@ -65,8 +81,7 @@ function normalizeAddress(
 function mapSupabasePlace(record: SupabaseOSMRecord): OSMPlace | null {
   if (!record.place_id || record.lat == null || record.lon == null) return null;
   const address = normalizeAddress(record.address ?? undefined);
-  const display =
-    (record.normalized_name ?? record.name) || address?.road || "Food resource";
+  const display = record.normalized_name || address?.road || "Food resource";
   const price =
     typeof record.price_level === "number" && isFinite(record.price_level)
       ? Math.max(1, Math.min(3, Math.round(record.price_level)))
@@ -77,12 +92,7 @@ function mapSupabasePlace(record: SupabaseOSMRecord): OSMPlace | null {
     lon: String(record.lon),
     display_name: display,
     type: record.type || "food_resource",
-    snap: Boolean(
-      (record as any).snap_eligible ??
-        (record as any).snap ??
-        (record as any).SNAP ??
-        false
-    ),
+    snap: Boolean(record.snap_eligible ?? false),
     price_level: price,
     address,
     openingHours: record.opening_hours ?? undefined,
@@ -94,41 +104,10 @@ async function fetchSupabaseFoodLocations(
   longitude: number
 ): Promise<OSMPlace[]> {
   try {
-    // Determine which select clause works, preferring snap_eligible
-    const selectClauses = [
-      // Prefer normalized_name first
-      "place_id,normalized_name,type,lat,lon,address,opening_hours,price_level,snap_eligible",
-      "place_id,normalized_name,type,lat,lon,address,opening_hours,price_level,snap",
-      'place_id,normalized_name,type,lat,lon,address,opening_hours,price_level,"SNAP"',
-      // Fallback to name if normalized_name not available
-      "place_id,name,type,lat,lon,address,opening_hours,price_level,snap_eligible",
-      "place_id,name,type,lat,lon,address,opening_hours,price_level,snap",
-      'place_id,name,type,lat,lon,address,opening_hours,price_level,"SNAP"',
-    ];
-
-    let workingSelect: string | null = null;
-
-    for (const clause of selectClauses) {
-      try {
-        const probe = await supabase
-          .from("osm_and_snap_places_atl")
-          .select(clause)
-          .range(0, 0);
-        if (!probe.error) {
-          workingSelect = clause;
-          break;
-        }
-      } catch {
-        // try next
-      }
-    }
-
-    if (!workingSelect) {
-      console.error(
-        "Supabase table fetch error: no valid select clause for SNAP column"
-      );
-      return [];
-    }
+    const t0 = Date.now();
+    // Use the canonical columns available in the table
+    const workingSelect =
+      "place_id,normalized_name,type,lat,lon,address,opening_hours,price_level,snap_eligible";
 
     // Paginate through all rows in chunks
     const pageSize = 1000;
@@ -149,6 +128,12 @@ async function fetchSupabaseFoodLocations(
 
       const batch: SupabaseOSMRecord[] = (data as any) || [];
       allRows = allRows.concat(batch);
+      dlog("fetch.page", {
+        from,
+        to,
+        batch: batch.length,
+        total: allRows.length,
+      });
 
       if (batch.length < pageSize) break; // last page
       from += pageSize;
@@ -156,6 +141,7 @@ async function fetchSupabaseFoodLocations(
       await new Promise((r) => setTimeout(r, 0));
     }
 
+    const t1 = Date.now();
     const mapped = allRows.map(mapSupabasePlace).filter(Boolean) as OSMPlace[];
 
     const withDistance = mapped
@@ -169,11 +155,89 @@ async function fetchSupabaseFoodLocations(
       .filter(Boolean) as Array<{ place: OSMPlace; distance: number }>;
 
     withDistance.sort((a, b) => a.distance - b.distance);
-    return withDistance.map((i) => i.place);
+    const result = withDistance.map((i) => ({
+      ...i.place,
+      distance: i.distance,
+    }));
+    const t2 = Date.now();
+    dlog("fetch.done", {
+      rows: allRows.length,
+      mapped: mapped.length,
+      result: result.length,
+      time: { queryMs: t1 - t0, mapAndSortMs: t2 - t1, totalMs: t2 - t0 },
+    });
+    return result;
   } catch (e) {
     console.error("Supabase table fetch error:", e);
     return [];
   }
+}
+
+// Fetch the full dataset once (no distance sorting), cache in memory only
+async function fetchAllPlacesRaw(): Promise<OSMPlace[]> {
+  const t0 = Date.now();
+  const workingSelect =
+    "place_id,normalized_name,type,lat,lon,address,opening_hours,price_level,snap_eligible";
+  const pageSize = 1000;
+  let from = 0;
+  let allRows: SupabaseOSMRecord[] = [];
+  while (true) {
+    const to = from + pageSize - 1;
+    const { data, error } = await supabase
+      .from("osm_and_snap_places_atl")
+      .select(workingSelect)
+      .range(from, to);
+    if (error) {
+      console.error("Supabase table fetch error (all):", error);
+      break;
+    }
+    const batch: SupabaseOSMRecord[] = (data as any) || [];
+    allRows = allRows.concat(batch);
+    dlog("all.fetch.page", {
+      from,
+      to,
+      batch: batch.length,
+      total: allRows.length,
+    });
+    if (batch.length < pageSize) break;
+    from += pageSize;
+    await new Promise((r) => setTimeout(r, 0));
+  }
+  const mapped = allRows.map(mapSupabasePlace).filter(Boolean) as OSMPlace[];
+  const t1 = Date.now();
+  dlog("all.fetch.done", {
+    rows: allRows.length,
+    mapped: mapped.length,
+    ms: t1 - t0,
+  });
+  return mapped;
+}
+
+export async function getAllPlacesOnce(options?: {
+  force?: boolean;
+}): Promise<OSMPlace[]> {
+  if (!options?.force && allPlacesCache?.data?.length) {
+    dlog("all.cache.hit", {
+      count: allPlacesCache.data.length,
+      ageMs: Date.now() - allPlacesCache.ts,
+    });
+    return allPlacesCache.data;
+  }
+  if (allPlacesInflight) {
+    dlog("all.inflight.reuse");
+    return allPlacesInflight;
+  }
+  allPlacesInflight = (async () => {
+    try {
+      const data = await fetchAllPlacesRaw();
+      // Do not persist to AsyncStorage to keep UI snappy; hydrate hours lazily when needed.
+      allPlacesCache = { data, ts: Date.now() };
+      return data;
+    } finally {
+      allPlacesInflight = null;
+    }
+  })();
+  return allPlacesInflight;
 }
 
 // Hydrate opening hours from memory, persistent cache, or payload; persist newly discovered hours.
@@ -223,6 +287,11 @@ export async function searchNearbyFoodLocations(
   if (!options?.force) {
     const mem = memoryCache.get(cacheKey);
     if (mem && Date.now() - mem.ts < CACHE_TTL_MS) {
+      dlog("cache.memory.hit", {
+        key: cacheKey,
+        ageMs: Date.now() - mem.ts,
+        count: mem.data.length,
+      });
       mem.data.forEach(
         (p) =>
           p.openingHours && hoursMemoryCache.set(p.place_id, p.openingHours!)
@@ -233,6 +302,7 @@ export async function searchNearbyFoodLocations(
     const persisted = await getCachedData<OSMPlace[]>(cacheKey);
     if (persisted && persisted.length) {
       memoryCache.set(cacheKey, { data: persisted, ts: Date.now() });
+      dlog("cache.storage.hit", { key: cacheKey, count: persisted.length });
       persisted.forEach(
         (p) =>
           p.openingHours && hoursMemoryCache.set(p.place_id, p.openingHours!)
@@ -240,17 +310,39 @@ export async function searchNearbyFoodLocations(
       return persisted;
     }
 
-    if (inflight.has(cacheKey)) return inflight.get(cacheKey)!;
+    if (inflight.has(cacheKey)) {
+      dlog("cache.inflight.reuse", { key: cacheKey });
+      return inflight.get(cacheKey)!;
+    }
   } else {
+    dlog("force.fetch", { key: cacheKey });
     memoryCache.delete(cacheKey);
   }
 
   const fetchPromise = (async () => {
     try {
+      const t0 = Date.now();
       const results = await fetchSupabaseFoodLocations(latitude, longitude);
+      const t1 = Date.now();
       await hydrateOpeningHours(results);
-      await setCachedData(cacheKey, results);
+      const t2 = Date.now();
+      if (DEBUG) {
+        dlog("persist.skip.debug", { key: cacheKey, count: results.length });
+      } else {
+        await setCachedData(cacheKey, results);
+      }
       memoryCache.set(cacheKey, { data: results, ts: Date.now() });
+      const t3 = Date.now();
+      dlog("fetch.pipeline", {
+        key: cacheKey,
+        counts: { results: results.length },
+        time: {
+          fetchMs: t1 - t0,
+          hydrateMs: t2 - t1,
+          persistMs: t3 - t2,
+          totalMs: t3 - t0,
+        },
+      });
       results.forEach(
         (p) =>
           p.openingHours && hoursMemoryCache.set(p.place_id, p.openingHours!)

@@ -1,12 +1,12 @@
-import { LinearGradient } from 'expo-linear-gradient';
-import { PropsWithChildren } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { LinearGradient } from "expo-linear-gradient";
+import { PropsWithChildren } from "react";
+import { StyleSheet, View } from "react-native";
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useColorScheme } from "@/hooks/use-color-scheme";
 
 export function AppBackground({ children }: PropsWithChildren) {
   const colorScheme = useColorScheme();
-  const palette = colorScheme === 'dark' ? darkPalette : lightPalette;
+  const palette = colorScheme === "dark" ? darkPalette : lightPalette;
 
   return (
     <View style={styles.container}>
@@ -16,7 +16,7 @@ export function AppBackground({ children }: PropsWithChildren) {
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
-    <View style={styles.content}>{children}</View>
+      <View style={styles.content}>{children}</View>
     </View>
   );
 }
@@ -29,14 +29,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   spot: {
-    position: 'absolute',
+    position: "absolute",
     width: 320,
     height: 320,
     borderRadius: 160,
     opacity: 0.4,
   },
   glow: {
-    position: 'absolute',
+    position: "absolute",
     width: 420,
     height: 420,
     borderRadius: 210,
@@ -45,9 +45,9 @@ const styles = StyleSheet.create({
 });
 
 const lightPalette = {
-  base: ['#f6fbff', '#ffffff'],
+  base: ["#f6fbff", "#ffffff"] as const,
 };
 
 const darkPalette = {
-  base: ['#060b1a', '#10162a'],
+  base: ["#060b1a", "#10162a"] as const,
 };

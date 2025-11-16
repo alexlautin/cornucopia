@@ -7,8 +7,8 @@ import { openNavigation } from "@/utils/navigation";
 import {
   categorizePlace,
   formatOSMAddress,
+  getAllPlacesOnce,
   getOpeningHours,
-  searchNearbyFoodLocations,
 } from "@/utils/osm-api";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
@@ -27,6 +27,14 @@ import {
 } from "react-native";
 
 const DEFAULT_COORDINATE = { latitude: 33.7676, longitude: -84.3908 };
+const DEBUG =
+  (typeof process !== "undefined" &&
+    (process.env.EXPO_PUBLIC_DEBUG_OSM === "1" ||
+      process.env.EXPO_PUBLIC_DEBUG_OSM === "true")) ||
+  false;
+const dlog = (...args: any[]) => {
+  if (DEBUG) console.log("INDEX:", ...args);
+};
 
 const sortByDistance = (locations: FoodLocation[]) =>
   [...locations].sort((a, b) => {
@@ -159,10 +167,7 @@ export default function HomeScreen() {
         }
 
         const locationData = await Location.getCurrentPositionAsync({});
-        const osmPlaces = await searchNearbyFoodLocations(
-          locationData.coords.latitude,
-          locationData.coords.longitude,
-          10000,
+        const osmPlaces = await getAllPlacesOnce(
           force ? { force: true } : undefined
         );
 
@@ -292,6 +297,7 @@ export default function HomeScreen() {
   }, [refreshing, getCurrentLocation]);
 
   const filteredLocations = useMemo(() => {
+    const t0 = Date.now();
     const q = query.trim().toLowerCase();
     let list = [...sortedLocations];
 
@@ -313,7 +319,16 @@ export default function HomeScreen() {
       );
     }
 
-    return list;
+    const res = list;
+    const ms = Date.now() - t0;
+    if (DEBUG)
+      dlog("filter.done", {
+        ms,
+        count: res.length,
+        filter: activeFilter,
+        qLen: q.length,
+      });
+    return res;
   }, [sortedLocations, activeFilter, query]);
 
   // Guarded onEndReached: only try to fetch more when there is something to paginate,
@@ -524,6 +539,11 @@ export default function HomeScreen() {
       <FlatList
         data={loading || isInitializing.current ? [] : filteredLocations}
         keyExtractor={(item) => item.id}
+        initialNumToRender={16}
+        windowSize={6}
+        maxToRenderPerBatch={24}
+        updateCellsBatchingPeriod={50}
+        removeClippedSubviews
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
