@@ -4,6 +4,7 @@ export interface FoodLocation {
   address: string;
   type: string;
   snap?: boolean;
+  priceLevel?: 1 | 2 | 3;
   // Preserve the raw OSM/shop/amenity tag for better filtering and icon mapping
   rawType?: string;
   coordinate: {

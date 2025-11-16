@@ -185,6 +185,9 @@ export default function HomeScreen() {
         const osmAddr = formatOSMAddress(m.place);
         const resolved = (m as any).resolvedAddress;
         const address = osmAddr || resolved || `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+        const pl = (m.place as any).price_level && Number.isFinite((m.place as any).price_level)
+          ? Math.max(1, Math.min(3, Math.round((m.place as any).price_level)))
+          : undefined;
         return {
           id: m.place.place_id || `osm-${index}`,
           name: (m.place.display_name || '').split(',')[0] || `${lat.toFixed(5)}, ${lon.toFixed(5)}`,
@@ -193,6 +196,7 @@ export default function HomeScreen() {
           coordinate: { latitude: lat, longitude: lon },
           distance: formatDistance(calcDist),
           snap: Boolean((m.place as any).snap),
+          priceLevel: pl as 1 | 2 | 3 | undefined,
         } as FoodLocation;
       });
 
@@ -528,6 +532,11 @@ export default function HomeScreen() {
                       <ThemedText style={styles.snapPillText}>SNAP</ThemedText>
                     </View>
                   ) : null}
+                  {item.priceLevel ? (
+                    <View style={styles.pricePill}>
+                      <ThemedText style={styles.pricePillText}>{'$'.repeat(item.priceLevel)}</ThemedText>
+                    </View>
+                  ) : null}
                 </View>
 
                 {expandedId !== item.id && (
@@ -727,6 +736,22 @@ const styles = StyleSheet.create({
   },
   snapPillText: {
     color: '#166534',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  pricePill: {
+    marginLeft: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: '#eef2ff',
+    borderWidth: 1,
+    borderColor: '#dcd7fe',
+    alignSelf: 'flex-start',
+  },
+  pricePillText: {
+    color: '#3730a3',
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.3,

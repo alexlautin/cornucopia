@@ -181,6 +181,9 @@ export default function TabTwoScreen() {
             const lat = parseFloat(place.lat ?? '0');
             const lon = parseFloat(place.lon ?? '0');
             const distMiles = getDistance(centerLat, centerLon, lat, lon);
+            const pl = (place as any).price_level && Number.isFinite((place as any).price_level)
+              ? Math.max(1, Math.min(3, Math.round((place as any).price_level)))
+              : undefined;
             return {
               id: place.place_id || `osm-${index}`,
               name: place.display_name.split(',')[0],
@@ -189,6 +192,7 @@ export default function TabTwoScreen() {
               coordinate: { latitude: lat, longitude: lon },
               distance: formatDistance(distMiles),
               snap: Boolean((place as any).snap),
+              priceLevel: pl as 1 | 2 | 3 | undefined,
             };
           });
 
@@ -388,6 +392,11 @@ export default function TabTwoScreen() {
                 {location.snap ? (
                   <View style={[styles.calloutBadge, { backgroundColor: '#e6f7eb' }]}> 
                     <ThemedText style={[styles.calloutBadgeText, { color: '#166534' }]}>SNAP</ThemedText>
+                  </View>
+                ) : null}
+                {location.priceLevel ? (
+                  <View style={[styles.calloutBadge, { backgroundColor: '#eef2ff' }]}> 
+                    <ThemedText style={[styles.calloutBadgeText, { color: '#3730a3' }]}>{'$'.repeat(location.priceLevel)}</ThemedText>
                   </View>
                 ) : null}
                 {location.distance && (

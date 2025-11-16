@@ -1,8 +1,8 @@
-import { supabase } from '@/lib/supabase';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getCachedPlaceHours, setCachedPlaceHours } from './cache';
-import { getDistance } from './distance';
-import { getCachedData, setCachedData } from './supabase-cache';
+import { supabase } from "@/lib/supabase";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getCachedPlaceHours, setCachedPlaceHours } from "./cache";
+import { getDistance } from "./distance";
+import { getCachedData, setCachedData } from "./supabase-cache";
 
 export interface OSMPlace {
   place_id: string;
@@ -11,6 +11,7 @@ export interface OSMPlace {
   display_name: string;
   type: string;
   snap?: boolean;
+  price_level?: number;
   address?: {
     road?: string;
     house_number?: string;
@@ -30,11 +31,13 @@ const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 type SupabaseOSMRecord = {
   place_id: string;
   name: string | null;
+  normalized_name?: string | null;
   type: string | null;
   lat: number | null;
   lon: number | null;
   snap_eligible?: boolean | null;
   snap?: boolean | null; // legacy/back-compat
+  price_level?: number | null;
   address?: {
     road?: string | null;
     house_number?: string | null;
@@ -45,9 +48,11 @@ type SupabaseOSMRecord = {
   opening_hours?: string[] | null;
 };
 
-function normalizeAddress(address?: SupabaseOSMRecord['address']): OSMPlace['address'] | undefined {
+function normalizeAddress(
+  address?: SupabaseOSMRecord["address"]
+): OSMPlace["address"] | undefined {
   if (!address) return undefined;
-  const normalized: OSMPlace['address'] = {
+  const normalized: OSMPlace["address"] = {
     house_number: address.house_number ?? undefined,
     road: address.road ?? undefined,
     city: address.city ?? undefined,
@@ -60,26 +65,44 @@ function normalizeAddress(address?: SupabaseOSMRecord['address']): OSMPlace['add
 function mapSupabasePlace(record: SupabaseOSMRecord): OSMPlace | null {
   if (!record.place_id || record.lat == null || record.lon == null) return null;
   const address = normalizeAddress(record.address ?? undefined);
-  const display = record.name || address?.road || 'Food resource';
+  const display =
+    (record.normalized_name ?? record.name) || address?.road || "Food resource";
+  const price = typeof record.price_level === 'number' && isFinite(record.price_level)
+    ? Math.max(1, Math.min(3, Math.round(record.price_level)))
+    : undefined;
   return {
     place_id: record.place_id,
     lat: String(record.lat),
     lon: String(record.lon),
     display_name: display,
-    type: record.type || 'food_resource',
-    snap: Boolean((record as any).snap_eligible ?? (record as any).snap ?? (record as any).SNAP ?? false),
+    type: record.type || "food_resource",
+    snap: Boolean(
+      (record as any).snap_eligible ??
+        (record as any).snap ??
+        (record as any).SNAP ??
+        false
+    ),
+    price_level: price,
     address,
     openingHours: record.opening_hours ?? undefined,
   };
 }
 
-async function fetchSupabaseFoodLocations(latitude: number, longitude: number): Promise<OSMPlace[]> {
+async function fetchSupabaseFoodLocations(
+  latitude: number,
+  longitude: number
+): Promise<OSMPlace[]> {
   try {
     // Determine which select clause works, preferring snap_eligible
     const selectClauses = [
-      'place_id,name,type,lat,lon,address,opening_hours,snap_eligible',
-      'place_id,name,type,lat,lon,address,opening_hours,snap',
-      'place_id,name,type,lat,lon,address,opening_hours,"SNAP"',
+      // Prefer normalized_name first
+      "place_id,normalized_name,type,lat,lon,address,opening_hours,price_level,snap_eligible",
+      "place_id,normalized_name,type,lat,lon,address,opening_hours,price_level,snap",
+      'place_id,normalized_name,type,lat,lon,address,opening_hours,price_level,"SNAP"',
+      // Fallback to name if normalized_name not available
+      "place_id,name,type,lat,lon,address,opening_hours,price_level,snap_eligible",
+      "place_id,name,type,lat,lon,address,opening_hours,price_level,snap",
+      'place_id,name,type,lat,lon,address,opening_hours,price_level,"SNAP"',
     ];
 
     let workingSelect: string | null = null;
@@ -87,7 +110,7 @@ async function fetchSupabaseFoodLocations(latitude: number, longitude: number): 
     for (const clause of selectClauses) {
       try {
         const probe = await supabase
-          .from('osm_and_snap_places_atl')
+          .from("osm_and_snap_places_atl")
           .select(clause)
           .range(0, 0);
         if (!probe.error) {
@@ -100,7 +123,9 @@ async function fetchSupabaseFoodLocations(latitude: number, longitude: number): 
     }
 
     if (!workingSelect) {
-      console.error('Supabase table fetch error: no valid select clause for SNAP column');
+      console.error(
+        "Supabase table fetch error: no valid select clause for SNAP column"
+      );
       return [];
     }
 
@@ -112,12 +137,12 @@ async function fetchSupabaseFoodLocations(latitude: number, longitude: number): 
     while (true) {
       const to = from + pageSize - 1;
       const { data, error } = await supabase
-        .from('osm_and_snap_places_atl')
+        .from("osm_and_snap_places_atl")
         .select(workingSelect)
         .range(from, to);
 
       if (error) {
-        console.error('Supabase table fetch error (paged):', error);
+        console.error("Supabase table fetch error (paged):", error);
         break;
       }
 
@@ -145,14 +170,16 @@ async function fetchSupabaseFoodLocations(latitude: number, longitude: number): 
     withDistance.sort((a, b) => a.distance - b.distance);
     return withDistance.map((i) => i.place);
   } catch (e) {
-    console.error('Supabase table fetch error:', e);
+    console.error("Supabase table fetch error:", e);
     return [];
   }
 }
 
 // Hydrate opening hours from memory, persistent cache, or payload; persist newly discovered hours.
 async function hydrateOpeningHours(places: OSMPlace[]): Promise<void> {
-  const needHours = places.filter((p) => !p.openingHours || p.openingHours.length === 0);
+  const needHours = places.filter(
+    (p) => !p.openingHours || p.openingHours.length === 0
+  );
   const persistQueue: Array<{ id: string; hours: string[] }> = [];
 
   for (const p of needHours) {
@@ -176,7 +203,9 @@ async function hydrateOpeningHours(places: OSMPlace[]): Promise<void> {
   }
 
   if (persistQueue.length) {
-    await Promise.all(persistQueue.map(({ id, hours }) => setCachedPlaceHours(id, hours)));
+    await Promise.all(
+      persistQueue.map(({ id, hours }) => setCachedPlaceHours(id, hours))
+    );
   }
 }
 
@@ -186,19 +215,27 @@ export async function searchNearbyFoodLocations(
   radiusMeters = 5000,
   options?: { force?: boolean }
 ): Promise<OSMPlace[]> {
-  const cacheKey = `osm_food_${latitude.toFixed(4)}_${longitude.toFixed(4)}_${radiusMeters}`;
+  const cacheKey = `osm_food_${latitude.toFixed(4)}_${longitude.toFixed(
+    4
+  )}_${radiusMeters}`;
 
   if (!options?.force) {
     const mem = memoryCache.get(cacheKey);
     if (mem && Date.now() - mem.ts < CACHE_TTL_MS) {
-      mem.data.forEach((p) => p.openingHours && hoursMemoryCache.set(p.place_id, p.openingHours!));
+      mem.data.forEach(
+        (p) =>
+          p.openingHours && hoursMemoryCache.set(p.place_id, p.openingHours!)
+      );
       return mem.data;
     }
 
     const persisted = await getCachedData<OSMPlace[]>(cacheKey);
     if (persisted && persisted.length) {
       memoryCache.set(cacheKey, { data: persisted, ts: Date.now() });
-      persisted.forEach((p) => p.openingHours && hoursMemoryCache.set(p.place_id, p.openingHours!));
+      persisted.forEach(
+        (p) =>
+          p.openingHours && hoursMemoryCache.set(p.place_id, p.openingHours!)
+      );
       return persisted;
     }
 
@@ -213,10 +250,13 @@ export async function searchNearbyFoodLocations(
       await hydrateOpeningHours(results);
       await setCachedData(cacheKey, results);
       memoryCache.set(cacheKey, { data: results, ts: Date.now() });
-      results.forEach((p) => p.openingHours && hoursMemoryCache.set(p.place_id, p.openingHours!));
+      results.forEach(
+        (p) =>
+          p.openingHours && hoursMemoryCache.set(p.place_id, p.openingHours!)
+      );
       return results;
     } catch (e) {
-      console.error('searchNearbyFoodLocations error:', e);
+      console.error("searchNearbyFoodLocations error:", e);
       return [];
     } finally {
       inflight.delete(cacheKey);
@@ -227,7 +267,9 @@ export async function searchNearbyFoodLocations(
   return fetchPromise;
 }
 
-export async function getOpeningHours(placeId: string): Promise<string[] | null> {
+export async function getOpeningHours(
+  placeId: string
+): Promise<string[] | null> {
   const mem = hoursMemoryCache.get(placeId);
   if (mem && mem.length) return mem;
 
@@ -241,34 +283,36 @@ export async function getOpeningHours(placeId: string): Promise<string[] | null>
 }
 
 export function formatOSMAddress(place: OSMPlace): string {
-  if (!place.address) return '';
+  if (!place.address) return "";
   const { house_number, road, city, state, postcode } = place.address;
   return [
-    house_number ? `${house_number} ` : '',
-    road ?? '',
-    city ? `, ${city}` : '',
-    state ? `, ${state}` : '',
-    postcode ? ` ${postcode}` : '',
-  ].join('').trim();
+    house_number ? `${house_number} ` : "",
+    road ?? "",
+    city ? `, ${city}` : "",
+    state ? `, ${state}` : "",
+    postcode ? ` ${postcode}` : "",
+  ]
+    .join("")
+    .trim();
 }
 
 export function categorizePlace(place: OSMPlace): string {
   const categoryMap: Record<string, string> = {
-    food_bank: 'Food Bank',
-    soup_kitchen: 'Soup Kitchen',
-    community_centre: 'Community Center',
-    place_of_worship: 'Place of Worship',
-    charity: 'Charity',
-    social_facility: 'Social Facility',
-    supermarket: 'Supermarket',
-    greengrocer: 'Greengrocer',
-    convenience: 'Convenience Store',
-    bakery: 'Bakery',
-    market: 'Market',
-    deli: 'Deli',
+    food_bank: "Food Bank",
+    soup_kitchen: "Soup Kitchen",
+    community_centre: "Community Center",
+    place_of_worship: "Place of Worship",
+    charity: "Charity",
+    social_facility: "Social Facility",
+    supermarket: "Supermarket",
+    greengrocer: "Greengrocer",
+    convenience: "Convenience Store",
+    bakery: "Bakery",
+    market: "Market",
+    deli: "Deli",
   };
 
-  return categoryMap[place.type] || place.type || 'Other';
+  return categoryMap[place.type] || place.type || "Other";
 }
 
 // Cache-clear listener helpers
@@ -287,13 +331,18 @@ export async function clearOSMMemoryCache() {
 
   try {
     const keys = await AsyncStorage.getAllKeys();
-    const toRemove = keys.filter((k) => k.startsWith('osm_cache_') || k.startsWith('osm_hours_') || k.includes('locations_'));
+    const toRemove = keys.filter(
+      (k) =>
+        k.startsWith("osm_cache_") ||
+        k.startsWith("osm_hours_") ||
+        k.includes("locations_")
+    );
     if (toRemove.length) {
       await AsyncStorage.multiRemove(toRemove);
       console.log(`OSM: Cleared ${toRemove.length} persisted cache keys`);
     }
   } catch (e) {
-    console.warn('OSM: Persistent cache clear failed', e);
+    console.warn("OSM: Persistent cache clear failed", e);
   }
 
   cacheClearListeners.forEach((cb) => {
